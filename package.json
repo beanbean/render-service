@@ -2,9 +2,9 @@
   "name": "render-service",
   "version": "1.0.0",
   "description": "API render ảnh Marathon HTML template (Node.js + Puppeteer)",
-  "main": "server.js",
+  "main": "server.cjs",
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.cjs"
   },
   "dependencies": {
     "express": "^4.19.2",
