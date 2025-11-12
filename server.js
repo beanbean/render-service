@@ -1,3 +1,9 @@
+// trong phần cấu hình Handlebars ở server.js
+import Handlebars from "handlebars";
+
+Handlebars.registerHelper("eq", (a,b) => a === b);
+Handlebars.registerHelper("includes", (arr, val) => Array.isArray(arr) && arr.includes(val));
+
 const express = require("express");
 const bodyParser = require("body-parser");
 const path = require("path");
