@@ -1,4 +1,4 @@
-// server.cjs — Render Service (Express + Handlebars + Puppeteer)
+// server.cjs — Render Service (Express + Handlebars + Puppeteer + Cloudflare R2)
 
 const path = require("path");
 const fs = require("fs/promises");
@@ -6,6 +6,7 @@ const express = require("express");
 const bodyParser = require("body-parser");
 const Handlebars = require("handlebars");
 const puppeteer = require("puppeteer");
+const uploadToR2 = require("./upload-r2.cjs"); // 🔹 moved lên đầu để dễ debug
 
 // --- Setup Express ---
 const app = express();
@@ -64,35 +65,52 @@ async function renderTemplate(file, data, opts = {}) {
   }
 }
 
-// --- API Endpoints ---
+// --- Leaderboard API ---
 app.post("/render/leaderboard", async (req, res) => {
   try {
-    const uploadToR2 = require("./upload-r2.cjs");
-const timestamp = Date.now();
-const filename = `daily-${req.body.name || "anon"}-${timestamp}`.replace(/\s+/g, "_");
+    const timestamp = Date.now();
+    const filename = `daily-${req.body.name || "anon"}-${timestamp}`.replace(/\s+/g, "_");
 
-const base64 = await renderTemplate("daily-leader.hbs", req.body, { width: 2160, height: 2700 });
-const imageUrl = await uploadToR2(base64, filename);
+    console.log(`[Render] Generating leaderboard for ${req.body.name || "anon"}...`);
+    const base64 = await renderTemplate("daily-leader.hbs", req.body, {
+      width: 1080,
+      height: 1600,
+    });
 
-res.json({ ok: true, image_url: imageUrl });
+    console.log("[Upload] Uploading to R2...");
+    const imageUrl = await uploadToR2(base64, filename, "reports");
+    console.log("[Upload] Done:", imageUrl);
 
+    res.json({ ok: true, image_url: imageUrl });
   } catch (e) {
+    console.error("Error in /render/leaderboard:", e);
     res.status(500).json({ ok: false, error: e.message });
   }
 });
 
+// --- Personal Card API ---
 app.post("/render/personal", async (req, res) => {
   try {
+    const timestamp = Date.now();
+    const filename = `personal-${req.body.name || "anon"}-${timestamp}`.replace(/\s+/g, "_");
+
+    console.log(`[Render] Generating personal card for ${req.body.name || "anon"}...`);
     const base64 = await renderTemplate("personal-card.hbs", req.body, {
       width: 1080,
       height: 1350,
     });
-    res.json({ ok: true, image_base64: base64 });
+
+    console.log("[Upload] Uploading to R2...");
+    const imageUrl = await uploadToR2(base64, filename, "reports");
+    console.log("[Upload] Done:", imageUrl);
+
+    res.json({ ok: true, image_url: imageUrl });
   } catch (e) {
+    console.error("Error in /render/personal:", e);
     res.status(500).json({ ok: false, error: e.message });
   }
 });
 
 // --- Start Server ---
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`render-service on ${PORT}`));
+app.listen(PORT, () => console.log(`✅ render-service on ${PORT}`));
