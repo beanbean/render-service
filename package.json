@@ -1,11 +1,20 @@
 {
   "name": "render-service",
   "version": "1.0.0",
+  "description": "API render ảnh Marathon HTML template (Node.js + Puppeteer)",
   "main": "server.js",
-  "scripts": { "start": "node server.js" },
+  "scripts": {
+    "start": "node server.js"
+  },
   "dependencies": {
     "express": "^4.19.2",
     "handlebars": "^4.7.8",
-    "puppeteer": "^22.7.1"
-  }
+    "puppeteer": "^22.7.1",
+    "body-parser": "^1.20.3"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "author": "nexme",
+  "license": "MIT"
 }
