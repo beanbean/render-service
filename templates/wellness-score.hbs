@@ -1,0 +1,111 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Wellness Score</title>
+  <style>
+    :root{
+      --bg1:#6a5cff; --bg2:#6ec3ff;
+      --card:#ffffff; --muted:#6b7280; --text:#0f172a;
+      --brand:#5b6cff; --ok:#22c55e; --ring:#e5e7eb;
+      --shadow:0 15px 40px rgba(2,6,23,.18);
+    }
+    *{box-sizing:border-box}
+    html,body{margin:0;padding:0;width:1080px;height:1920px;font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,"Helvetica Neue","Noto Sans",Arial,"Apple Color Emoji","Segoe UI Emoji"}
+    body{
+      background: radial-gradient(1200px 1200px at 20% 0%, var(--bg2), #8bbdff 30%, var(--bg1) 80%);
+      color:var(--text);
+    }
+    .wrap{padding:48px 48px 40px; display:flex; flex-direction:column; align-items:center;}
+    .title{
+      font-weight:800; letter-spacing:3px; color:#fff; font-size:72px; text-align:center;
+      text-transform:uppercase; margin:0 0 28px;
+      text-shadow:0 6px 20px rgba(0,0,0,.22);
+    }
+    .card{
+      width:980px; background:var(--card); border-radius:28px;
+      box-shadow:var(--shadow); overflow:hidden; margin-top:12px;
+    }
+    .card-head{
+      padding:28px 32px 8px; display:flex; flex-direction:column; align-items:center; gap:16px;
+      background:linear-gradient(180deg, rgba(255,255,255,.6), rgba(255,255,255,.25));
+      border-bottom:1px solid #eef2ff;
+    }
+    .avatar{
+      width:140px;height:140px;border-radius:24px; overflow:hidden;
+      box-shadow:0 12px 30px rgba(2,6,23,.18); border:6px solid #fff;
+    }
+    .avatar img{width:100%;height:100%;object-fit:cover}
+    .team{font-size:36px; font-weight:700; color:#111827; text-align:center}
+    .days{display:flex; gap:28px; align-items:center; justify-content:center; padding:8px 0 18px;}
+    .day{font-size:38px; color:#111827; opacity:.5}
+    .day.is-active{color:#6d28d9; opacity:1; font-weight:800; transform:translateY(-1px)}
+    .grid{padding:10px 36px 36px}
+    .row{display:grid; grid-template-columns: 1fr repeat(10,1fr); align-items:center; gap:18px; padding:18px 0; border-bottom:1px dashed #eef2ff}
+    .row:last-child{border-bottom:none}
+    .label{font-size:34px; color:#111827}
+    .dot{
+      width:40px;height:40px;border-radius:50%;
+      border:3px solid var(--ring); display:flex;align-items:center;justify-content:center;
+      box-shadow:inset 0 1px 0 rgba(255,255,255,.25);
+    }
+    .ok{background:var(--ok); border-color:var(--ok); color:#fff; font-size:28px; line-height:1}
+    .footer{
+      display:grid; grid-template-columns:1fr 1fr; gap:0; margin:26px; border-radius:24px; overflow:hidden;
+      box-shadow:var(--shadow);
+    }
+    .box{background:#f8fafc; padding:32px; text-align:center}
+    .box h4{margin:0 0 8px; font-size:36px; color:#3b82f6}
+    .score{font-size:96px; font-weight:900; color:#1f2937; display:flex; align-items:center; justify-content:center; gap:18px}
+    .star{font-size:78px}
+    .left{border-right:1px solid #e5e7eb}
+    .hint{color:#fff; opacity:.9; font-size:28px; text-align:center; margin-top:22px}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1 class="title">MARATHON WELLNESS SCORE</h1>
+
+    <div class="card">
+      <div class="card-head">
+        <div class="avatar"><img src="{{avatar}}" /></div>
+        <div class="team">{{team_name}}, Lap {{lap}}, Day {{day}}</div>
+        <div class="days">
+          {{#each days}}
+            <div class="day {{#if (eq this ../day)}}is-active{{/if}}">{{this}}</div>
+          {{/each}}
+        </div>
+      </div>
+
+      <div class="grid">
+        {{#each habits}}
+          <div class="row">
+            <div class="label">{{label}}</div>
+            {{#each days}}
+              {{!-- days is 1..10 inside each row --}}
+              {{#if (includes ../completed this)}}
+                <div class="dot ok">✓</div>
+              {{else}}
+                <div class="dot"></div>
+              {{/if}}
+            {{/each}}
+          </div>
+        {{/each}}
+      </div>
+
+      <div class="footer">
+        <div class="box left">
+          <h4>Today</h4>
+          <div class="score">{{today_score}} <span class="star">★</span></div>
+        </div>
+        <div class="box">
+          <h4>This Lap</h4>
+          <div class="score">{{lap_score}} <span class="star">★</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="hint">Tips: Green = completed; empty = not yet.</div>
+  </div>
+</body>
+</html>
