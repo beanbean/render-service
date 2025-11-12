@@ -1,26 +1,47 @@
 <!doctype html>
-<html lang="vi">
+<html>
 <head>
-<meta charset="utf-8">
-<style>
-  body{margin:0;width:1080px;height:1350px;display:flex;flex-direction:column;align-items:center;justify-content:center;
-       background:linear-gradient(135deg,#ff8a5c,#ffb199);font-family:Arial,sans-serif;color:#fff}
-  h1{margin:0 0 24px;font-size:72px;letter-spacing:2px}
-  .card{background:#fff;color:#111;border-radius:32px;box-shadow:0 20px 60px rgba(0,0,0,.25);padding:36px;display:flex;flex-direction:column;align-items:center}
-  .avatar{width:240px;height:240px;border-radius:28px;overflow:hidden;margin-top:-120px;border:10px solid #fff;box-shadow:0 12px 30px rgba(0,0,0,.15)}
-  .avatar img{width:100%;height:100%;object-fit:cover}
-  .name{font-size:56px;font-weight:800;margin:24px 0 8px}
-  .sub{opacity:.75}
-  .footer{position:absolute;bottom:48px;font-size:36px}
-</style>
+  <meta charset="utf-8" />
+  <title>Daily Leader</title>
+  <style>
+    :root{
+      --bg1:#f29963; --bg2:#e27f55;
+      --text:#1f2937; --muted:#111827; --card:#fff;
+      --shadow:0 20px 50px rgba(2,6,23,.18);
+    }
+    *{box-sizing:border-box}
+    html,body{margin:0;padding:0;width:1080px;height:1600px;font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,"Helvetica Neue","Noto Sans",Arial}
+    body{
+      background: radial-gradient(1400px 1400px at 15% 0%, var(--bg1), var(--bg2) 65%);
+      color:var(--text);
+      display:flex; align-items:center; justify-content:center;
+    }
+    .wrap{width:920px; text-align:center}
+    .title{color:#fff; text-transform:uppercase; font-weight:800; letter-spacing:3px; font-size:58px; margin:0 0 12px; text-shadow:0 6px 18px rgba(0,0,0,.25)}
+    .subtitle{color:#fff; font-size:88px; font-weight:900; letter-spacing:1px; margin:0 0 34px}
+    .badge{
+      background:#fff; border-radius:42px; padding:38px 40px 44px; box-shadow:var(--shadow);
+      display:flex; flex-direction:column; align-items:center; gap:18px
+    }
+    .avatar{width:350px; height:350px; border-radius:34px; overflow:hidden; box-shadow:0 16px 40px rgba(2,6,23,.25); border:10px solid #fff}
+    .avatar img{width:100%;height:100%;object-fit:cover}
+    .name{font-size:72px; font-weight:800; color:#111827}
+    .info{font-size:40px; color:#111827; opacity:.85}
+    .foot{color:#fff; font-size:48px; margin-top:70px}
+  </style>
 </head>
 <body>
-  <h1>DAILY LEADER</h1>
-  <div class="card">
-    <div class="avatar"><img src="{{avatar}}" alt=""></div>
-    <div class="name">{{PLAYER_NAME}}</div>
-    <div class="sub">{{TEAM_NAME}} • Lap {{LAP_NUMBER}}, Day {{DAY_NUMBER}}</div>
+  <div class="wrap">
+    <div class="title">MARATHON WELLNESS SCORE</div>
+    <div class="subtitle">DAILY LEADER</div>
+
+    <div class="badge">
+      <div class="avatar"><img src="{{avatar}}" /></div>
+      <div class="name">{{name}}</div>
+      <div class="info">Team {{team}}, Lap {{lap}}, Day {{day}}</div>
+    </div>
+
+    <div class="foot">Stars for this day {{stars}}</div>
   </div>
-  <div class="footer">Stars for this day {{SCORE_TODAY}}</div>
 </body>
 </html>
