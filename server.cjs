@@ -67,11 +67,15 @@ async function renderTemplate(file, data, opts = {}) {
 // --- API Endpoints ---
 app.post("/render/leaderboard", async (req, res) => {
   try {
-    const base64 = await renderTemplate("daily-leader.hbs", req.body, {
-      width: 2160,
-      height: 2700,
-    });
-    res.json({ ok: true, image_base64: base64 });
+    const uploadToR2 = require("./upload-r2.cjs");
+const timestamp = Date.now();
+const filename = `daily-${req.body.name || "anon"}-${timestamp}`.replace(/\s+/g, "_");
+
+const base64 = await renderTemplate("daily-leader.hbs", req.body, { width: 2160, height: 2700 });
+const imageUrl = await uploadToR2(base64, filename);
+
+res.json({ ok: true, image_url: imageUrl });
+
   } catch (e) {
     res.status(500).json({ ok: false, error: e.message });
   }
