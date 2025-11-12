@@ -1,5 +1,5 @@
 // trong phần cấu hình Handlebars ở server.js
-import Handlebars from "handlebars";
+const Handlebars = require("handlebars");
 
 Handlebars.registerHelper("eq", (a,b) => a === b);
 Handlebars.registerHelper("includes", (arr, val) => Array.isArray(arr) && arr.includes(val));
