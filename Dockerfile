@@ -1,7 +1,7 @@
-# --- Base image ---
+# ---- Base image ----
 FROM node:20-slim
 
-# --- Cài Chromium và dependencies cần thiết ---
+# ---- Cài đặt Chromium và các dependencies cần thiết cho Puppeteer ----
 RUN apt-get update && apt-get install -y \
     chromium \
     fonts-liberation \
@@ -15,25 +15,31 @@ RUN apt-get update && apt-get install -y \
     libxdamage1 \
     libxfixes3 \
     libxrandr2 \
+    libnss3 \
+    libx11-6 \
+    libxss1 \
+    libgtk-3-0 \
+    fonts-freefont-ttf \
     xdg-utils \
     && rm -rf /var/lib/apt/lists/*
 
-# --- Đặt thư mục làm việc ---
+# ---- Đặt thư mục làm việc ----
 WORKDIR /app
 
-# --- Copy và cài dependencies ---
+# ---- Copy và cài đặt dependencies ----
 COPY package*.json ./
 RUN npm install --omit=dev
 
-# --- Copy toàn bộ mã nguồn ---
+# ---- Copy toàn bộ mã nguồn ----
 COPY . .
 
-# --- Đặt biến môi trường ---
+# ---- Biến môi trường ----
 ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
 ENV NODE_ENV=production
+ENV PORT=3000
 
-# --- Expose port cho Dokploy ---
+# ---- Mở port cho Dokploy ----
 EXPOSE 3000
 
-# --- Lệnh chạy ---
-CMD ["npm", "start"]
+# ---- Lệnh khởi động trực tiếp ----
+CMD ["node", "server.cjs"]
