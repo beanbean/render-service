@@ -16,7 +16,14 @@ app.use(bodyParser.json({ limit: "2mb" }));
 const API_KEY = process.env.API_KEY || "";
 app.use((req, res, next) => {
   if (!API_KEY) return next(); // nếu chưa set API_KEY thì bỏ qua check
-  const k = req.header("x-api-key");
+  // Ưu tiên Header, nếu không có thì tìm trong Query (?api_key=...)
+  const k = req.header("x-api-key") || req.query.api_key;
+
+  console.log(`[AUTH DEBUG] Client sent: '${k}' | Server expects: '${API_KEY}'`);
+
+  if (k !== API_KEY) {
+    return res.status(401).json({ ok: false, error: "unauthorized" });
+  }
   
   // 🔥 GG DEBUG: In ra log để xem lệch ở đâu (Dấu nháy đơn '' giúp nhìn thấy khoảng trắng)
   console.log(`[AUTH DEBUG] Client sent: '${k}' | Server expects: '${API_KEY}'`);
