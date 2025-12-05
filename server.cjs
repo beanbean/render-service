@@ -25,12 +25,6 @@ app.use((req, res, next) => {
     return res.status(401).json({ ok: false, error: "unauthorized" });
   }
   
-  // 🔥 GG DEBUG: In ra log để xem lệch ở đâu (Dấu nháy đơn '' giúp nhìn thấy khoảng trắng)
-  console.log(`[AUTH DEBUG] Client sent: '${k}' | Server expects: '${API_KEY}'`);
-
-  if (k !== API_KEY) {
-    return res.status(401).json({ ok: false, error: "unauthorized" });
-  }
   next();
 });
 
