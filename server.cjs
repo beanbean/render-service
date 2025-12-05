@@ -97,10 +97,28 @@ app.post("/render/leaderboard", async (req, res) => {
 app.post("/render/personal", async (req, res) => {
   try {
     const timestamp = Date.now();
-    const filename = `personal-${req.body.name || "anon"}-${timestamp}`.replace(/\s+/g, "_");
+    
+    // Lấy tên người chơi để đặt tên file ảnh (Ưu tiên cấu trúc mới: player.name)
+    const playerName = (req.body.player && req.body.player.name) ? req.body.player.name : (req.body.name || "anon");
+    
+    // Tạo tên file an toàn (bỏ dấu cách)
+    const filename = `personal-${playerName}-${timestamp}`.replace(/\s+/g, "_");
 
-    console.log(`[Render] Generating personal card for ${req.body.name || "anon"}...`);
-    const base64 = await renderTemplate("personal-card.hbs", req.body, {
+    console.log(`[Render] Generating personal card for ${playerName}...`);
+
+    // 🔥 LOGIC CHỌN TEMPLATE ĐỘNG (DYNAMIC TEMPLATE)
+    // 1. Lấy tên template từ JSON (SQL gửi lên), nếu không có thì dùng mặc định 'personal_progress_v1'
+    let templateName = req.body.template || "personal_progress_v1";
+    
+    // 2. Đảm bảo có đuôi .hbs
+    if (!templateName.endsWith(".hbs")) {
+      templateName += ".hbs";
+    }
+
+    console.log(`[Render] Using template file: ${templateName}`);
+
+    // 3. Render
+    const base64 = await renderTemplate(templateName, req.body, {
       width: 1080,
       height: 1350,
     });
@@ -112,6 +130,7 @@ app.post("/render/personal", async (req, res) => {
     res.json({ ok: true, image_url: imageUrl });
   } catch (e) {
     console.error("Error in /render/personal:", e);
+    // In rõ lỗi để dễ debug (ví dụ nếu không tìm thấy file template)
     res.status(500).json({ ok: false, error: e.message });
   }
 });
