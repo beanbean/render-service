@@ -54,9 +54,10 @@ async function renderTemplate(file, data, opts = {}) {
       // Lấy URL từ biến môi trường hoặc dùng mặc định link của bạn
       const baseUrl = process.env.TEMPLATE_BASE_URL || "https://raw.githubusercontent.com/beanbean/nexme-render-templates/main";
       
-      console.log(`[Template] ⚠️ Local not found. Fetching REMOTE: ${baseUrl}/${file}`);
-      
-      const response = await fetch(`${baseUrl}/${file}`);
+const targetUrl = `${baseUrl}/${file}`; // Ghép chuỗi trước
+console.log(`[DEBUG URL] Full URL to fetch: '${targetUrl}'`); // Log ra xem nó là cái gì
+
+const response = await fetch(targetUrl);
       if (!response.ok) {
         throw new Error(`Failed to fetch template from GitHub: ${response.statusText}`);
       }
