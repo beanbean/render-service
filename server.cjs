@@ -40,21 +40,24 @@ Handlebars.registerHelper("ifEquals", function (a, b, opts) {
 });
 
 // --- 5. RENDER FUNCTION (HYBRID LOCAL/REMOTE) ---
+// --- 🔥 CORE: NO-CACHE RENDER FUNCTION ---
 async function renderTemplate(file, data, opts = {}) {
   try {
     let src = "";
     
-    // Ưu tiên tìm file Local
+    // 1. Ưu tiên tìm file Local
     const localPath = path.join(__dirname, "templates", file);
     try {
       src = await fs.readFile(localPath, "utf8");
       console.log(`[Template] ✅ Loaded LOCAL: ${file}`);
     } catch (err) {
-      // Nếu không có -> Tìm Online (GitHub)
+      // 2. Nếu không có -> Tìm Online (GitHub)
       const baseUrl = process.env.TEMPLATE_BASE_URL || "https://raw.githubusercontent.com/beanbean/nexme-render-templates/main";
-      const url = `${baseUrl}/${file}`;
       
-      console.log(`[Template] ⚠️ Local missing. Fetching: ${url}`);
+      // 🔥 TRICK QUAN TRỌNG: Thêm ?t=timestamp để ép GitHub trả về file mới nhất
+      const url = `${baseUrl}/${file}?t=${Date.now()}`;
+      
+      console.log(`[Template] Fetching FRESH (No-Cache): ${url}`);
       
       const response = await fetch(url);
       if (!response.ok) {
