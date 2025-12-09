@@ -91,16 +91,36 @@ async function renderTemplate(file, data, opts = {}) {
 
 // --- 6. API ROUTES ---
 
-// Route: Leaderboard
+/// Route: Leaderboard (Updated for V2)
 app.post("/render/leaderboard", async (req, res) => {
   try {
+    const data = req.body;
     const timestamp = Date.now();
-    const filename = `daily-${req.body.name || "anon"}-${timestamp}`.replace(/\s+/g, "_");
-    let templateName = req.body.template || "daily_leaderboard_v1.hbs";
-    const base64 = await renderTemplate(templateName, req.body, { width: 1080, height: 1600 });
+    const teamName = data.player?.team || "Team";
+    
+    // Tạo tên file an toàn
+    const cleanName = String(teamName)
+        .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+        .replace(/[^a-zA-Z0-9\s]/g, "")
+        .trim().replace(/\s+/g, "_");
+    const filename = `leaderboard-${cleanName}-${timestamp}`;
+
+    // 1. CHỌN TEMPLATE (Ưu tiên từ n8n gửi sang)
+    let templateName = data.template_url || data.template || "daily_leaderboard_v1.hbs";
+
+    console.log(`[Render] Generating Leaderboard via ${templateName}...`);
+
+    const width = data.width || 1080;
+    const height = data.height || 1600;
+
+    // 2. RENDER & UPLOAD
+    const base64 = await renderTemplate(templateName, data, { width, height });
     const imageUrl = await uploadToR2(base64, filename, "reports");
+    
+    console.log(`[Render] Success: ${imageUrl}`);
     res.json({ ok: true, image_url: imageUrl });
   } catch (e) {
+    console.error("Error:", e);
     res.status(500).json({ ok: false, error: e.message });
   }
 });
