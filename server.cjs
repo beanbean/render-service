@@ -1,5 +1,3 @@
-// server.cjs — Render Service (Full & Fixed)
-
 const path = require("path");
 const fs = require("fs/promises");
 const express = require("express");
@@ -8,18 +6,15 @@ const Handlebars = require("handlebars");
 const puppeteer = require("puppeteer");
 const uploadToR2 = require("./upload-r2.cjs");
 
-// --- 1. SETUP EXPRESS (PHẦN BẠN BỊ THIẾU) ---
+// --- 1. SETUP EXPRESS ---
 const app = express();
-app.use(bodyParser.json({ limit: "5mb" })); // Tăng limit lên 5mb cho an toàn
+app.use(bodyParser.json({ limit: "5mb" })); 
 
 // --- 2. API KEY AUTH ---
 const API_KEY = process.env.API_KEY || "";
 app.use((req, res, next) => {
   if (!API_KEY) return next();
-  
-  // Chấp nhận key từ Header HOẶC Query URL
   const k = req.header("x-api-key") || req.query.api_key;
-
   if (k !== API_KEY) {
     console.log(`[AUTH FAIL] Client sent: '${k}'`);
     return res.status(401).json({ ok: false, error: "unauthorized" });
@@ -28,7 +23,7 @@ app.use((req, res, next) => {
 });
 
 // --- 3. HEALTH CHECK ---
-app.get("/", (_, res) => res.json({ ok: true, mode: "hybrid-template-final" }));
+app.get("/", (_, res) => res.json({ ok: true, mode: "hybrid-template-final-v2" }));
 
 // --- 4. HANDLEBARS HELPERS ---
 Handlebars.registerHelper("eq", (a, b) => a === b);
@@ -39,29 +34,47 @@ Handlebars.registerHelper("ifEquals", function (a, b, opts) {
   return a == b ? opts.fn(this) : opts.inverse(this);
 });
 
-// --- 5. RENDER FUNCTION (HYBRID LOCAL/REMOTE) ---
-// --- 🔥 CORE: NO-CACHE RENDER FUNCTION ---
+// --- 5. RENDER FUNCTION ---
 async function renderTemplate(file, data, opts = {}) {
   try {
     let src = "";
     
+    // Xử lý nếu file là URL full (tránh lỗi lặp đường dẫn)
+    let fileNameClean = file;
+    if (file.startsWith("http")) {
+        // Nếu n8n lỡ gửi link full, ta chỉ lấy phần đuôi hoặc dùng luôn tùy logic
+        // Ở đây giả định file là tên file hoặc relative path
+        const parts = file.split('/');
+        fileNameClean = parts[parts.length - 1]; // Fallback đơn giản
+    }
+
     // 1. Ưu tiên tìm file Local
-    const localPath = path.join(__dirname, "templates", file);
+    const localPath = path.join(__dirname, "templates", fileNameClean);
     try {
       src = await fs.readFile(localPath, "utf8");
-      console.log(`[Template] ✅ Loaded LOCAL: ${file}`);
+      console.log(`[Template] ✅ Loaded LOCAL: ${fileNameClean}`);
     } catch (err) {
-      // 2. Nếu không có -> Tìm Online (GitHub)
+      // 2. Tìm Online (GitHub)
       const baseUrl = process.env.TEMPLATE_BASE_URL || "https://raw.githubusercontent.com/beanbean/nexme-render-templates/main";
       
-      // 🔥 TRICK QUAN TRỌNG: Thêm ?t=timestamp để ép GitHub trả về file mới nhất
-      const url = `${baseUrl}/${file}?t=${Date.now()}`;
+      // Fix lỗi khai báo trùng biến 'url' ở code cũ
+      // Xử lý link: Nếu file input đã là link http thì dùng luôn, nếu không thì ghép với base
+      let finalUrl = "";
+      if (file.startsWith("http")) {
+          finalUrl = file; 
+      } else {
+          finalUrl = `${baseUrl}/${file}`;
+      }
       
-      console.log(`[Template] Fetching FRESH (No-Cache): ${url}`);
+      // Thêm timestamp chống cache
+      if (finalUrl.includes('?')) finalUrl += `&t=${Date.now()}`;
+      else finalUrl += `?t=${Date.now()}`;
       
-      const response = await fetch(url);
+      console.log(`[Template] Fetching FRESH: ${finalUrl}`);
+      
+      const response = await fetch(finalUrl);
       if (!response.ok) {
-        throw new Error(`Failed to fetch template from GitHub (${response.status}): ${url}`);
+        throw new Error(`Failed to fetch template (${response.status}): ${finalUrl}`);
       }
       src = await response.text();
       console.log(`[Template] ✅ Fetched REMOTE success.`);
@@ -96,17 +109,13 @@ async function renderTemplate(file, data, opts = {}) {
 
 // --- 6. API ROUTES ---
 
-// Route: Leaderboard
+// Route: Leaderboard (Giữ nguyên)
 app.post("/render/leaderboard", async (req, res) => {
   try {
     const timestamp = Date.now();
     const filename = `daily-${req.body.name || "anon"}-${timestamp}`.replace(/\s+/g, "_");
 
-    let templateName = req.body.template || "daily_leaderboard_v1";
-    if (!templateName.endsWith(".hbs")) templateName += ".hbs";
-
-    console.log(`[Render] Generating Leaderboard via ${templateName}...`);
-
+    let templateName = req.body.template || "daily_leaderboard_v1.hbs";
     const width = req.body.width || 1080;
     const height = req.body.height || 1600;
 
@@ -120,73 +129,69 @@ app.post("/render/leaderboard", async (req, res) => {
   }
 });
 
-// Route: Personal Card (Final Version - Data Mapped for V1 Template)
+// Route: Personal Card (🔥 CẬP NHẬT LOGIC MAPPING MỚI TẠI ĐÂY)
 app.post("/render/personal", async (req, res) => {
   try {
     const data = req.body;
     const timestamp = Date.now();
 
-    // 1. CHUẨN BỊ DỮ LIỆU NHANH
+    // === 1. SUPER MAPPING (SQL V2 -> Template V1) ===
     const player = data.player || {};
     const stats = player.stats || {};
     const round = data.round_config || {};
     const grid = player.grid || [];
 
-    // 2. DATA MAPPING (QUAN TRỌNG: Map SQL V2 -> Template V1)
+    // Helper format số
+    const fmt = (n) => parseFloat(n || 0).toFixed(1).replace('.0', '');
+
+    // Map Grid (Lưới 10 ngày) - Quan trọng để hiện số Gram
+    const mappedGrid = grid.map(d => {
+        let valDisplay = "";
+        // Nếu đã log và có số liệu
+        if (d.status === 'logged' && d.delta_from_start !== null && d.delta_from_start !== undefined) {
+            const valGram = Math.round(d.delta_from_start * 1000);
+            valDisplay = (valGram > 0 ? "+" : "") + valGram; // VD: +500 hoặc -300
+        }
+        return {
+            ...d, 
+            status: d.status,
+            change: valDisplay, // Template V1 dùng biến này để hiện số
+            value: valDisplay,
+            is_today: (d.day === round.day_index)
+        };
+    });
+
     const context = {
-        ...data, // Giữ data gốc
-        
-        // --- Header Info ---
+        ...data,
+        // Header Info
         p_name:     player.name || data.p_name || "Chiến Binh",
         team_name:  player.team || "Marathon",
-        round_name: round.name || "01",
-        day_index:  round.day_index || 1,
-        date_str:   new Date().toLocaleDateString('vi-VN'), // Ngày hiện tại
+        round_name: round.name || "Vòng 1",
+        date_str:   new Date().toLocaleDateString('vi-VN'),
 
-        // --- 3 Ô Số Liệu Lớn ---
-        p_start:    stats.start_weight,      // Ô 1: Bắt đầu (VD: 70)
-        p_current:  stats.current_weight,    // Ô 2: Về đích (VD: 67)
-        p_weight:   stats.current_weight,    // (Dự phòng cho template cũ)
-        p_change:   stats.delta_weight,      // Ô 3: Kết quả (VD: -3)
+        // Big Stats (3 Ô To)
+        p_start:    fmt(stats.start_weight),
+        p_current:  fmt(stats.current_weight),
+        p_change:   (stats.delta_weight > 0 ? "+" : "") + fmt(stats.delta_weight),
 
-        // --- Lưới 10 Ngày (Map Grid -> Days) ---
-        days: grid.map(d => {
-            // Logic tính số hiển thị trong ô màu
-            // Nếu có log: chuyển đổi kg sang gram (VD: -0.5 -> -500)
-            let valGram = null;
-            if (d.delta_from_start !== null && d.delta_from_start !== undefined) {
-                valGram = Math.round(d.delta_from_start * 1000);
-                // Thêm dấu + nếu tăng cân
-                if (valGram > 0) valGram = "+" + valGram;
-            }
+        // Grid
+        days: mappedGrid,
+        grid: mappedGrid,
 
-            return {
-                day: d.day,
-                status: d.status, // logged / missing / future
-                // Template cũ thường dùng biến 'change' hoặc 'value' để hiện số
-                change: valGram,       
-                value: valGram,
-                // Dự phòng nếu template dùng tên khác
-                is_today: (d.day === round.day_index)
-            };
-        }),
-
-        // --- Giữ cấu trúc gốc cho tương lai ---
-        player: player,
-        stats: stats,
-        round: round
+        // Fallbacks
+        player, stats, round
     };
+    // ===============================================
 
-    // 3. CHỌN TEMPLATE
+    // Chọn Template (Ưu tiên n8n gửi sang)
     let templateName = data.template_url || data.template || "personal_progress_v1.hbs";
 
-    // 4. TẠO TÊN FILE AN TOÀN (Slugify)
+    // Tạo tên file sạch
     const cleanName = String(context.p_name)
         .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
         .replace(/đ/g, "d").replace(/Đ/g, "D")
         .replace(/[^a-zA-Z0-9\s]/g, "")
         .trim().replace(/\s+/g, "_");
-        
     const filename = `personal-${cleanName}-${timestamp}`;
 
     console.log(`[Render] Generating via ${templateName} for ${context.p_name}...`);
@@ -194,7 +199,7 @@ app.post("/render/personal", async (req, res) => {
     const width = data.width || 1080;
     const height = data.height || 1350;
 
-    // 5. RENDER & UPLOAD
+    // Render & Upload (Dùng hàm uploadToR2 có sẵn của bạn)
     const base64 = await renderTemplate(templateName, context, { width, height });
     const imageUrl = await uploadToR2(base64, filename, "reports");
     
@@ -207,6 +212,7 @@ app.post("/render/personal", async (req, res) => {
     res.status(500).json({ ok: false, error: e.message });
   }
 });
+
 // --- 7. START SERVER ---
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`✅ render-service on ${PORT}`));
