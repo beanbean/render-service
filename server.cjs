@@ -120,28 +120,67 @@ app.post("/render/leaderboard", async (req, res) => {
   }
 });
 
-// Route: Personal Card
+// Route: Personal Card (Final Version - Data Mapped for V1 Template)
 app.post("/render/personal", async (req, res) => {
   try {
     const data = req.body;
     const timestamp = Date.now();
 
-    // 1. DATA MAPPING
+    // 1. CHUẨN BỊ DỮ LIỆU NHANH
+    const player = data.player || {};
+    const stats = player.stats || {};
+    const round = data.round_config || {};
+    const grid = player.grid || [];
+
+    // 2. DATA MAPPING (QUAN TRỌNG: Map SQL V2 -> Template V1)
     const context = {
-        ...data,
-        p_name: data.player?.name || data.p_name || "anon",
-        p_weight: data.player?.stats?.current_weight || data.p_weight,
-        p_change: data.player?.stats?.total_lost || data.p_change,
-        player: data.player || {},
-        stats: data.player?.stats || {},
-        round: data.round_config || {}
+        ...data, // Giữ data gốc
+        
+        // --- Header Info ---
+        p_name:     player.name || data.p_name || "Chiến Binh",
+        team_name:  player.team || "Marathon",
+        round_name: round.name || "01",
+        day_index:  round.day_index || 1,
+        date_str:   new Date().toLocaleDateString('vi-VN'), // Ngày hiện tại
+
+        // --- 3 Ô Số Liệu Lớn ---
+        p_start:    stats.start_weight,      // Ô 1: Bắt đầu (VD: 70)
+        p_current:  stats.current_weight,    // Ô 2: Về đích (VD: 67)
+        p_weight:   stats.current_weight,    // (Dự phòng cho template cũ)
+        p_change:   stats.delta_weight,      // Ô 3: Kết quả (VD: -3)
+
+        // --- Lưới 10 Ngày (Map Grid -> Days) ---
+        days: grid.map(d => {
+            // Logic tính số hiển thị trong ô màu
+            // Nếu có log: chuyển đổi kg sang gram (VD: -0.5 -> -500)
+            let valGram = null;
+            if (d.delta_from_start !== null && d.delta_from_start !== undefined) {
+                valGram = Math.round(d.delta_from_start * 1000);
+                // Thêm dấu + nếu tăng cân
+                if (valGram > 0) valGram = "+" + valGram;
+            }
+
+            return {
+                day: d.day,
+                status: d.status, // logged / missing / future
+                // Template cũ thường dùng biến 'change' hoặc 'value' để hiện số
+                change: valGram,       
+                value: valGram,
+                // Dự phòng nếu template dùng tên khác
+                is_today: (d.day === round.day_index)
+            };
+        }),
+
+        // --- Giữ cấu trúc gốc cho tương lai ---
+        player: player,
+        stats: stats,
+        round: round
     };
 
-    // 2. CHỌN TEMPLATE
-    // Nếu n8n gửi "personal-progress/template.hbs" -> dùng luôn
+    // 3. CHỌN TEMPLATE
     let templateName = data.template_url || data.template || "personal_progress_v1.hbs";
 
-    // 3. TẠO TÊN FILE AN TOÀN (Slugify)
+    // 4. TẠO TÊN FILE AN TOÀN (Slugify)
     const cleanName = String(context.p_name)
         .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
         .replace(/đ/g, "d").replace(/Đ/g, "D")
@@ -150,12 +189,12 @@ app.post("/render/personal", async (req, res) => {
         
     const filename = `personal-${cleanName}-${timestamp}`;
 
-    console.log(`[Render] Generating Personal Card via ${templateName} for ${context.p_name}...`);
+    console.log(`[Render] Generating via ${templateName} for ${context.p_name}...`);
 
     const width = data.width || 1080;
     const height = data.height || 1350;
 
-    // 4. RENDER & UPLOAD
+    // 5. RENDER & UPLOAD
     const base64 = await renderTemplate(templateName, context, { width, height });
     const imageUrl = await uploadToR2(base64, filename, "reports");
     
@@ -168,7 +207,6 @@ app.post("/render/personal", async (req, res) => {
     res.status(500).json({ ok: false, error: e.message });
   }
 });
-
 // --- 7. START SERVER ---
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`✅ render-service on ${PORT}`));
