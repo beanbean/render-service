@@ -163,7 +163,7 @@ app.post('/render/personal', async (req, res) => {
         console.log('[Render] Done. Buffer size:', imageBuffer.length);
         
         // TODO: GG HÃY PASTE LẠI LOGIC UPLOAD/RESPONSE CŨ VÀO ĐÂY
-        // res.json({ image_url: "..." }); 
+        res.json({ ok: true, image_url: imageUrl });
 
     } catch (error) {
         console.error('[Render Error]', error);
