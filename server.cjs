@@ -130,81 +130,92 @@ app.post("/render/leaderboard", async (req, res) => {
 });
 
 // Route: Personal Card (🔥 CẬP NHẬT LOGIC MAPPING MỚI TẠI ĐÂY)
+// Route: Personal Card (Template-Matched Version)
 app.post("/render/personal", async (req, res) => {
   try {
     const data = req.body;
     const timestamp = Date.now();
 
-    // === 1. SUPER MAPPING (SQL V2 -> Template V1) ===
-    const player = data.player || {};
-    const stats = player.stats || {};
-    const round = data.round_config || {};
-    const grid = player.grid || [];
+    // Dữ liệu gốc từ n8n/SQL
+    const p = data.player || {};
+    const s = p.stats || {};
+    const r = data.round_config || {};
+    const g = p.grid || [];
 
-    // Helper format số
-    const fmt = (n) => parseFloat(n || 0).toFixed(1).replace('.0', '');
+    // Helper: Format số (70.0 -> 70)
+    const fmt = (n) => (n ? parseFloat(n).toFixed(1).replace('.0', '') : null);
 
-    // Map Grid (Lưới 10 ngày) - Quan trọng để hiện số Gram
-    const mappedGrid = grid.map(d => {
-        let valDisplay = "";
-        // Nếu đã log và có số liệu
-        if (d.status === 'logged' && d.delta_from_start !== null && d.delta_from_start !== undefined) {
-            const valGram = Math.round(d.delta_from_start * 1000);
-            valDisplay = (valGram > 0 ? "+" : "") + valGram; // VD: +500 hoặc -300
+    // 1. CHUẨN BỊ Grid (Days) -> Map sang 'value_g'
+    const daysMapped = g.map(d => {
+        let valGram = 0;
+        let statusClass = d.status; // 'logged', 'missing', 'future'
+
+        // Logic đổi màu Grid theo Template
+        // Template dùng class: 'gain' (tăng), 'loss' (giảm) cho ô màu
+        // Nhưng SQL trả về 'logged'. Ta cần map lại:
+        if (d.status === 'logged' && d.delta_from_start !== null) {
+            valGram = Math.round(d.delta_from_start * 1000);
+            if (valGram > 0) statusClass = 'gain';
+            if (valGram < 0) statusClass = 'loss';
+            if (valGram === 0) statusClass = 'logged'; // Hoặc 'loss' nhẹ
         }
+
         return {
-            ...d, 
-            status: d.status,
-            change: valDisplay, // Template V1 dùng biến này để hiện số
-            value: valDisplay,
-            is_today: (d.day === round.day_index)
+            status: statusClass, // gain, loss, missing, future
+            value_g: valGram,    // Template dùng {{value_g}}
+            label: `NGÀY ${d.day}`, // Template dùng {{label}}
+            leader: d.is_today ? "HÔM NAY" : null // Badge trên đầu ô
         };
     });
 
+    // 2. CONTEXT MAPPING (Khớp chính xác với Template {{...}})
     const context = {
-        ...data,
-        // Header Info
-        p_name:     player.name || data.p_name || "Chiến Binh",
-        team_name:  player.team || "Marathon",
-        round_name: round.name || "Vòng 1",
-        date_str:   new Date().toLocaleDateString('vi-VN'),
+        player: {
+            name: p.name || "Chiến Binh",
+            team: p.team || "Marathon",
+            avatar: p.avatar, // Nếu có
+            round_name: r.name || "Vòng 1",
+            // Dòng phụ: "Ngày 9, 09/12/2025"
+            info_line: `Ngày ${r.day_index || 1}, ${new Date().toLocaleDateString('vi-VN')}`
+        },
+        
+        stats: {
+            // Ô 1: BẮT ĐẦU
+            start: fmt(s.start_weight),
+            
+            // Ô 2: VỀ ĐÍCH (Chỉ hiện nếu là ngày cuối hoặc đã xong? Ở đây cứ hiện Current cho user vui)
+            finish: fmt(s.current_weight), 
+            
+            // Ô 3: KẾT QUẢ (-3 hoặc +1)
+            result: fmt(s.delta_weight),
+            
+            // Footer: "Cân nặng thay đổi..."
+            current_change: fmt(s.delta_weight)
+        },
 
-        // Big Stats (3 Ô To)
-        p_start:    fmt(stats.start_weight),
-        p_current:  fmt(stats.current_weight),
-        p_change:   (stats.delta_weight > 0 ? "+" : "") + fmt(stats.delta_weight),
-
-        // Grid
-        days: mappedGrid,
-        grid: mappedGrid,
-
-        // Fallbacks
-        player, stats, round
+        days: daysMapped
     };
-    // ===============================================
 
-    // Chọn Template (Ưu tiên n8n gửi sang)
-    let templateName = data.template_url || data.template || "personal_progress_v1.hbs";
-
-    // Tạo tên file sạch
-    const cleanName = String(context.p_name)
+    // 3. RENDER
+    let templateName = data.template_url || "personal_progress_v1.hbs";
+    
+    // Slugify filename
+    const cleanName = String(context.player.name)
         .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
         .replace(/đ/g, "d").replace(/Đ/g, "D")
         .replace(/[^a-zA-Z0-9\s]/g, "")
         .trim().replace(/\s+/g, "_");
     const filename = `personal-${cleanName}-${timestamp}`;
 
-    console.log(`[Render] Generating via ${templateName} for ${context.p_name}...`);
+    console.log(`[Render] Generating for ${context.player.name}...`);
 
     const width = data.width || 1080;
-    const height = data.height || 1350;
+    const height = data.height || 1444; // Template set 1444px height
 
-    // Render & Upload (Dùng hàm uploadToR2 có sẵn của bạn)
     const base64 = await renderTemplate(templateName, context, { width, height });
     const imageUrl = await uploadToR2(base64, filename, "reports");
     
     console.log(`[Render] Success: ${imageUrl}`);
-    
     res.json({ ok: true, image_url: imageUrl });
 
   } catch (e) {
