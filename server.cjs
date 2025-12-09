@@ -121,29 +121,39 @@ app.post("/render/leaderboard", async (req, res) => {
 });
 
 // Route: Personal Card
-app.post("/render/personal", async (req, res) => {
+app.post('/render/personal', async (req, res) => {
   try {
-    const timestamp = Date.now();
-    const playerName = (req.body.player && req.body.player.name) ? req.body.player.name : (req.body.name || "anon");
-    const filename = `personal-${playerName}-${timestamp}`.replace(/\s+/g, "_");
-
-    let templateName = req.body.template || "personal_progress_v1";
-    if (!templateName.endsWith(".hbs")) templateName += ".hbs";
-
-    console.log(`[Render] Generating Personal Card via ${templateName}...`);
-
-    const width = req.body.width || 1080;
-    const height = req.body.height || 1350;
-
-    const base64 = await renderTemplate(templateName, req.body, { width, height });
-    const imageUrl = await uploadToR2(base64, filename, "reports");
+    const data = req.body;
     
-    res.json({ ok: true, image_url: imageUrl });
-  } catch (e) {
-    console.error("Error:", e);
-    res.status(500).json({ ok: false, error: e.message });
-  }
-});
+    // --- 🟢 FIX: CHO PHÉP N8N GỬI LINK TEMPLATE MỚI ---
+    // Logic cũ: Hardcode link v1
+    // Logic mới: Ưu tiên link từ n8n gửi lên, nếu không có mới dùng link cũ
+    const defaultUrl = "https://raw.githubusercontent.com/beanbean/nexme-render-templates/main/personal_progress_v1.hbs";
+    const templateUrl = data.template_url || defaultUrl; 
+
+    console.log(`[Render] Generating card using template: ${templateUrl}`);
+    
+    // ... (Giữ nguyên đoạn fetch template và compile handlebars bên dưới) ...
+    
+    // --- 🟢 BỔ SUNG: DATA MAPPING (CHO CHẮC CHẮN) ---
+    // Vì template cũ dùng p_name, p_weight... mà Data V2 là player.name, stats...
+    // Ta map dữ liệu phẳng ra root để template nào cũng chạy được
+    const context = {
+        ...data, // Data gốc
+        // Map cho template cũ (nếu lỡ dùng lại)
+        p_name: data.player?.name,
+        p_weight: data.player?.stats?.current_weight,
+        p_change: data.player?.stats?.total_lost,
+        // Map cho template mới
+        player: data.player,
+        stats: data.player?.stats,
+        round: data.round_config
+    };
+
+    // Render
+    const imageBuffer = await renderImage(templateUrl, context); // Hàm render của bạn
+    
+    // ... (Return response)
 
 // --- 7. START SERVER ---
 const PORT = process.env.PORT || 3000;
