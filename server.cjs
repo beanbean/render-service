@@ -129,67 +129,72 @@ app.post("/render/leaderboard", async (req, res) => {
   }
 });
 
-// Route: Personal Card (🔥 CẬP NHẬT LOGIC MAPPING MỚI TẠI ĐÂY)
-// Route: Personal Card (Template-Matched Version)
+// Route: Personal Card (Logic: Hide Result until Day 10)
 app.post("/render/personal", async (req, res) => {
   try {
     const data = req.body;
     const timestamp = Date.now();
 
-    // Dữ liệu gốc từ n8n/SQL
+    // Data gốc
     const p = data.player || {};
     const s = p.stats || {};
     const r = data.round_config || {};
     const g = p.grid || [];
 
-    // Helper: Format số (70.0 -> 70)
-    const fmt = (n) => (n ? parseFloat(n).toFixed(1).replace('.0', '') : null);
+    // Helper format số
+    const fmt = (n) => (n !== null && n !== undefined ? parseFloat(n).toFixed(1).replace('.0', '') : null);
 
-    // 1. CHUẨN BỊ Grid (Days) -> Map sang 'value_g'
+    // --- LOGIC KIỂM TRA HOÀN THÀNH ---
+    // Tìm xem ngày 10 đã được log chưa?
+    // (Giả định vòng đấu 10 ngày. Nếu dynamic thì dùng r.total_days)
+    const targetDay = r.total_days || 10; 
+    const finalDayLog = g.find(d => d.day === targetDay);
+    
+    // Điều kiện hiện kết quả: Ngày cuối cùng phải có status là 'logged'
+    const isFinished = (finalDayLog && finalDayLog.status === 'logged');
+
+    // 1. MAP GRID
     const daysMapped = g.map(d => {
         let valGram = 0;
-        let statusClass = d.status; // 'logged', 'missing', 'future'
+        let statusClass = d.status; 
 
-        // Logic đổi màu Grid theo Template
-        // Template dùng class: 'gain' (tăng), 'loss' (giảm) cho ô màu
-        // Nhưng SQL trả về 'logged'. Ta cần map lại:
+        // Logic đổi màu Grid
         if (d.status === 'logged' && d.delta_from_start !== null) {
             valGram = Math.round(d.delta_from_start * 1000);
             if (valGram > 0) statusClass = 'gain';
             if (valGram < 0) statusClass = 'loss';
-            if (valGram === 0) statusClass = 'logged'; // Hoặc 'loss' nhẹ
+            if (valGram === 0) statusClass = 'logged';
         }
 
         return {
-            status: statusClass, // gain, loss, missing, future
-            value_g: valGram,    // Template dùng {{value_g}}
-            label: `NGÀY ${d.day}`, // Template dùng {{label}}
-            leader: d.is_today ? "HÔM NAY" : null // Badge trên đầu ô
+            status: statusClass,
+            value_g: valGram,
+            label: `NGÀY ${d.day}`,
+            leader: d.is_today ? "HÔM NAY" : null
         };
     });
 
-    // 2. CONTEXT MAPPING (Khớp chính xác với Template {{...}})
+    // 2. MAP CONTEXT
     const context = {
         player: {
             name: p.name || "Chiến Binh",
             team: p.team || "Marathon",
-            avatar: p.avatar, // Nếu có
+            avatar: p.avatar,
             round_name: r.name || "Vòng 1",
-            // Dòng phụ: "Ngày 9, 09/12/2025"
             info_line: `Ngày ${r.day_index || 1}, ${new Date().toLocaleDateString('vi-VN')}`
         },
         
         stats: {
-            // Ô 1: BẮT ĐẦU
+            // Ô 1: BẮT ĐẦU (Luôn hiện)
             start: fmt(s.start_weight),
             
-            // Ô 2: VỀ ĐÍCH (Chỉ hiện nếu là ngày cuối hoặc đã xong? Ở đây cứ hiện Current cho user vui)
-            finish: fmt(s.current_weight), 
+            // Ô 2: VỀ ĐÍCH (Chỉ hiện khi đã xong vòng, ngược lại là null để hiện ?)
+            finish: isFinished ? fmt(s.current_weight) : null,
             
-            // Ô 3: KẾT QUẢ (-3 hoặc +1)
-            result: fmt(s.delta_weight),
+            // Ô 3: KẾT QUẢ (Chỉ hiện khi đã xong vòng)
+            result: isFinished ? fmt(s.delta_weight) : null,
             
-            // Footer: "Cân nặng thay đổi..."
+            // Footer: Cân nặng thay đổi (Vẫn hiện tiến độ hiện tại để user biết mình đang đi đến đâu)
             current_change: fmt(s.delta_weight)
         },
 
@@ -198,8 +203,6 @@ app.post("/render/personal", async (req, res) => {
 
     // 3. RENDER
     let templateName = data.template_url || "personal_progress_v1.hbs";
-    
-    // Slugify filename
     const cleanName = String(context.player.name)
         .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
         .replace(/đ/g, "d").replace(/Đ/g, "D")
@@ -207,10 +210,10 @@ app.post("/render/personal", async (req, res) => {
         .trim().replace(/\s+/g, "_");
     const filename = `personal-${cleanName}-${timestamp}`;
 
-    console.log(`[Render] Generating for ${context.player.name}...`);
+    console.log(`[Render] Generating for ${context.player.name} (Finished: ${isFinished})...`);
 
     const width = data.width || 1080;
-    const height = data.height || 1444; // Template set 1444px height
+    const height = data.height || 1444;
 
     const base64 = await renderTemplate(templateName, context, { width, height });
     const imageUrl = await uploadToR2(base64, filename, "reports");
