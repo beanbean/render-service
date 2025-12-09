@@ -23,7 +23,7 @@ app.use((req, res, next) => {
 });
 
 // --- 3. HEALTH CHECK ---
-app.get("/", (_, res) => res.json({ ok: true, mode: "hybrid-template-strict-v3" }));
+app.get("/", (_, res) => res.json({ ok: true, mode: "leaderboard-ready-v4" }));
 
 // --- 4. HANDLEBARS HELPERS ---
 Handlebars.registerHelper("eq", (a, b) => a === b);
@@ -33,6 +33,8 @@ Handlebars.registerHelper("includes", (arr, val) => Array.isArray(arr) && arr.in
 Handlebars.registerHelper("ifEquals", function (a, b, opts) {
   return a == b ? opts.fn(this) : opts.inverse(this);
 });
+// 🔥 MỚI: Helper cộng số (Dùng cho Rank #1, #2...)
+Handlebars.registerHelper("add", (a, b) => a + b);
 
 // --- 5. RENDER FUNCTION ---
 async function renderTemplate(file, data, opts = {}) {
@@ -49,7 +51,6 @@ async function renderTemplate(file, data, opts = {}) {
     const localPath = path.join(__dirname, "templates", fileNameClean);
     try {
       src = await fs.readFile(localPath, "utf8");
-      // console.log(`[Template] ✅ Loaded LOCAL: ${fileNameClean}`);
     } catch (err) {
       // 2. Remote
       const baseUrl = process.env.TEMPLATE_BASE_URL || "https://raw.githubusercontent.com/beanbean/nexme-render-templates/main";
@@ -73,7 +74,7 @@ async function renderTemplate(file, data, opts = {}) {
 
     const page = await browser.newPage();
     const width = opts.width || 1080;
-    const height = opts.height || 1444; // Set theo template
+    const height = opts.height || 1444; 
 
     await page.setViewport({ width, height });
     await page.setContent(html, { waitUntil: ["domcontentloaded", "networkidle0"] });
@@ -91,29 +92,28 @@ async function renderTemplate(file, data, opts = {}) {
 
 // --- 6. API ROUTES ---
 
-/// Route: Leaderboard (Updated for V2)
+// Route: Leaderboard (🔥 ĐÃ FIX: Nhận template_url từ n8n)
 app.post("/render/leaderboard", async (req, res) => {
   try {
     const data = req.body;
     const timestamp = Date.now();
     const teamName = data.player?.team || "Team";
     
-    // Tạo tên file an toàn
+    // Tên file sạch
     const cleanName = String(teamName)
         .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
         .replace(/[^a-zA-Z0-9\s]/g, "")
         .trim().replace(/\s+/g, "_");
     const filename = `leaderboard-${cleanName}-${timestamp}`;
 
-    // 1. CHỌN TEMPLATE (Ưu tiên từ n8n gửi sang)
-    let templateName = data.template_url || data.template || "daily_leaderboard_v1.hbs";
+    // Ưu tiên template từ n8n gửi sang
+    let templateName = data.template_url || "daily_leaderboard_v1.hbs";
 
     console.log(`[Render] Generating Leaderboard via ${templateName}...`);
 
     const width = data.width || 1080;
     const height = data.height || 1600;
 
-    // 2. RENDER & UPLOAD
     const base64 = await renderTemplate(templateName, data, { width, height });
     const imageUrl = await uploadToR2(base64, filename, "reports");
     
@@ -125,7 +125,7 @@ app.post("/render/leaderboard", async (req, res) => {
   }
 });
 
-// Route: Personal Card (STRICT LOGIC FIX)
+// Route: Personal Card (GIỮ NGUYÊN CODE ĐÃ CHẠY ỔN CỦA BẠN)
 app.post("/render/personal", async (req, res) => {
   try {
     const data = req.body;
@@ -136,22 +136,15 @@ app.post("/render/personal", async (req, res) => {
     const r = data.round_config || {};
     const g = p.grid || [];
 
-    // Helper format
     const fmt = (n) => (n !== null && n !== undefined ? parseFloat(n).toFixed(1).replace('.0', '') : null);
 
-    // --- LOGIC CHECK HOÀN THÀNH (STRICT) ---
-    // 1. Xác định ngày đích (Mặc định 10)
+    // --- LOGIC CHECK HOÀN THÀNH ---
     const targetDay = parseInt(r.total_days || 10);
-    
-    // 2. Tìm log của ngày đích (So sánh an toàn bằng string/int)
     const finalDayLog = g.find(d => parseInt(d.day) === targetDay);
-    
-    // 3. Chỉ hiện kết quả nếu ngày đích có status là 'logged'
     const isFinished = !!(finalDayLog && finalDayLog.status === 'logged');
 
-    console.log(`[Logic Check] Player: ${p.name} | TargetDay: ${targetDay} | Status: ${finalDayLog?.status} => Finished: ${isFinished}`);
+    console.log(`[Logic Check] Player: ${p.name} | Finished: ${isFinished}`);
 
-    // --- MAPPING ---
     const daysMapped = g.map(d => {
         let valGram = 0;
         let statusClass = d.status; 
@@ -179,26 +172,20 @@ app.post("/render/personal", async (req, res) => {
         },
         stats: {
             start: fmt(s.start_weight),
-            
-            // Logic ẩn hiện tại đây:
             finish: isFinished ? fmt(s.current_weight) : null,
             result: isFinished ? fmt(s.delta_weight) : null,
-            
             current_change: fmt(s.delta_weight)
         },
         days: daysMapped
     };
 
-    // Render & Upload
     let templateName = data.template_url || "personal_progress_v1.hbs";
     const cleanName = String(context.player.name).normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-zA-Z0-9\s]/g, "").trim().replace(/\s+/g, "_");
     const filename = `personal-${cleanName}-${timestamp}`;
 
-    console.log(`[Render] Generating...`);
     const base64 = await renderTemplate(templateName, context, { width: 1080, height: 1444 });
     const imageUrl = await uploadToR2(base64, filename, "reports");
     
-    console.log(`[Render] Success: ${imageUrl}`);
     res.json({ ok: true, image_url: imageUrl });
 
   } catch (e) {
