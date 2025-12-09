@@ -122,38 +122,54 @@ app.post("/render/leaderboard", async (req, res) => {
 
 // Route: Personal Card
 app.post('/render/personal', async (req, res) => {
-  try {
-    const data = req.body;
-    
-    // --- 🟢 FIX: CHO PHÉP N8N GỬI LINK TEMPLATE MỚI ---
-    // Logic cũ: Hardcode link v1
-    // Logic mới: Ưu tiên link từ n8n gửi lên, nếu không có mới dùng link cũ
-    const defaultUrl = "https://raw.githubusercontent.com/beanbean/nexme-render-templates/main/personal_progress_v1.hbs";
-    const templateUrl = data.template_url || defaultUrl; 
+    try {
+        const data = req.body;
 
-    console.log(`[Render] Generating card using template: ${templateUrl}`);
-    
-    // ... (Giữ nguyên đoạn fetch template và compile handlebars bên dưới) ...
-    
-    // --- 🟢 BỔ SUNG: DATA MAPPING (CHO CHẮC CHẮN) ---
-    // Vì template cũ dùng p_name, p_weight... mà Data V2 là player.name, stats...
-    // Ta map dữ liệu phẳng ra root để template nào cũng chạy được
-    const context = {
-        ...data, // Data gốc
-        // Map cho template cũ (nếu lỡ dùng lại)
-        p_name: data.player?.name,
-        p_weight: data.player?.stats?.current_weight,
-        p_change: data.player?.stats?.total_lost,
-        // Map cho template mới
-        player: data.player,
-        stats: data.player?.stats,
-        round: data.round_config
-    };
+        // 1. Xử lý Template URL (Ưu tiên link từ n8n gửi sang)
+        const defaultUrl = "https://raw.githubusercontent.com/beanbean/nexme-render-templates/main/personal_progress_v1.hbs";
+        const templateUrl = data.template_url || defaultUrl;
 
-    // Render
-    const imageBuffer = await renderImage(templateUrl, context); // Hàm render của bạn
-    
-    // ... (Return response)
+        console.log(`[Render] Generating card using template: ${templateUrl}`);
+
+        // 2. Map dữ liệu (Để template cũ hay mới đều chạy được)
+        const context = {
+            ...data, // Data gốc
+            // Map cho template cũ (p_name, p_weight...)
+            p_name: data.player?.name || data.p_name,
+            p_weight: data.player?.stats?.current_weight || data.p_weight,
+            p_change: data.player?.stats?.total_lost || data.p_change,
+            // Map cho template mới
+            player: data.player,
+            stats: data.player?.stats,
+            round: data.round_config
+        };
+
+        // 3. Render Ảnh (Dùng hàm có sẵn của bạn)
+        const imageBuffer = await renderTemplate(templateUrl, context);
+
+        // 4. Upload & Trả về kết quả
+        // ⚠️ QUAN TRỌNG: Hãy kiểm tra code cũ của bạn dùng hàm upload nào (ví dụ: uploadToSupabase, uploadS3...)
+        // Dưới đây là logic giả định, bạn hãy giữ lại logic upload cũ của mình nhé:
+        
+        // --- BẮT ĐẦU VÙNG CẦN CHÚ Ý ---
+        // Ví dụ: const imageUrl = await uploadService.upload(imageBuffer);
+        // res.json({ status: 'success', image_url: imageUrl });
+        
+        // Nếu bạn chưa tìm lại được logic upload, tôi tạm trả về base64 để test (nhưng n8n cần URL)
+        // Hãy khôi phục dòng res.json(...) cũ của bạn ở đây!
+        // -----------------------------
+
+        // Tạm thời log ra để biết đã chạy xong
+        console.log('[Render] Done. Buffer size:', imageBuffer.length);
+        
+        // TODO: GG HÃY PASTE LẠI LOGIC UPLOAD/RESPONSE CŨ VÀO ĐÂY
+        // res.json({ image_url: "..." }); 
+
+    } catch (error) {
+        console.error('[Render Error]', error);
+        res.status(500).json({ error: error.message });
+    }
+}); // <--- ĐỪNG QUÊN DẤU NÀY (Đóng hàm app.post)
 
 // --- 7. START SERVER ---
 const PORT = process.env.PORT || 3000;
