@@ -23,7 +23,7 @@ app.use((req, res, next) => {
 });
 
 // --- 3. HEALTH CHECK ---
-app.get("/", (_, res) => res.json({ ok: true, mode: "hybrid-template-final-v2" }));
+app.get("/", (_, res) => res.json({ ok: true, mode: "hybrid-template-strict-v3" }));
 
 // --- 4. HANDLEBARS HELPERS ---
 Handlebars.registerHelper("eq", (a, b) => a === b);
@@ -39,45 +39,27 @@ async function renderTemplate(file, data, opts = {}) {
   try {
     let src = "";
     
-    // Xử lý nếu file là URL full (tránh lỗi lặp đường dẫn)
     let fileNameClean = file;
     if (file.startsWith("http")) {
-        // Nếu n8n lỡ gửi link full, ta chỉ lấy phần đuôi hoặc dùng luôn tùy logic
-        // Ở đây giả định file là tên file hoặc relative path
         const parts = file.split('/');
-        fileNameClean = parts[parts.length - 1]; // Fallback đơn giản
+        fileNameClean = parts[parts.length - 1];
     }
 
-    // 1. Ưu tiên tìm file Local
+    // 1. Local
     const localPath = path.join(__dirname, "templates", fileNameClean);
     try {
       src = await fs.readFile(localPath, "utf8");
-      console.log(`[Template] ✅ Loaded LOCAL: ${fileNameClean}`);
+      // console.log(`[Template] ✅ Loaded LOCAL: ${fileNameClean}`);
     } catch (err) {
-      // 2. Tìm Online (GitHub)
+      // 2. Remote
       const baseUrl = process.env.TEMPLATE_BASE_URL || "https://raw.githubusercontent.com/beanbean/nexme-render-templates/main";
-      
-      // Fix lỗi khai báo trùng biến 'url' ở code cũ
-      // Xử lý link: Nếu file input đã là link http thì dùng luôn, nếu không thì ghép với base
-      let finalUrl = "";
-      if (file.startsWith("http")) {
-          finalUrl = file; 
-      } else {
-          finalUrl = `${baseUrl}/${file}`;
-      }
-      
-      // Thêm timestamp chống cache
-      if (finalUrl.includes('?')) finalUrl += `&t=${Date.now()}`;
-      else finalUrl += `?t=${Date.now()}`;
+      let finalUrl = file.startsWith("http") ? file : `${baseUrl}/${file}`;
+      finalUrl += (finalUrl.includes('?') ? '&' : '?') + `t=${Date.now()}`;
       
       console.log(`[Template] Fetching FRESH: ${finalUrl}`);
-      
       const response = await fetch(finalUrl);
-      if (!response.ok) {
-        throw new Error(`Failed to fetch template (${response.status}): ${finalUrl}`);
-      }
+      if (!response.ok) throw new Error(`Failed to fetch template (${response.status})`);
       src = await response.text();
-      console.log(`[Template] ✅ Fetched REMOTE success.`);
     }
 
     const tpl = Handlebars.compile(src);
@@ -91,7 +73,7 @@ async function renderTemplate(file, data, opts = {}) {
 
     const page = await browser.newPage();
     const width = opts.width || 1080;
-    const height = opts.height || 1350;
+    const height = opts.height || 1444; // Set theo template
 
     await page.setViewport({ width, height });
     await page.setContent(html, { waitUntil: ["domcontentloaded", "networkidle0"] });
@@ -109,63 +91,56 @@ async function renderTemplate(file, data, opts = {}) {
 
 // --- 6. API ROUTES ---
 
-// Route: Leaderboard (Giữ nguyên)
+// Route: Leaderboard
 app.post("/render/leaderboard", async (req, res) => {
   try {
     const timestamp = Date.now();
     const filename = `daily-${req.body.name || "anon"}-${timestamp}`.replace(/\s+/g, "_");
-
     let templateName = req.body.template || "daily_leaderboard_v1.hbs";
-    const width = req.body.width || 1080;
-    const height = req.body.height || 1600;
-
-    const base64 = await renderTemplate(templateName, req.body, { width, height });
+    const base64 = await renderTemplate(templateName, req.body, { width: 1080, height: 1600 });
     const imageUrl = await uploadToR2(base64, filename, "reports");
-    
     res.json({ ok: true, image_url: imageUrl });
   } catch (e) {
-    console.error("Error:", e);
     res.status(500).json({ ok: false, error: e.message });
   }
 });
 
-// Route: Personal Card (Logic: Hide Result until Day 10)
+// Route: Personal Card (STRICT LOGIC FIX)
 app.post("/render/personal", async (req, res) => {
   try {
     const data = req.body;
     const timestamp = Date.now();
 
-    // Data gốc
     const p = data.player || {};
     const s = p.stats || {};
     const r = data.round_config || {};
     const g = p.grid || [];
 
-    // Helper format số
+    // Helper format
     const fmt = (n) => (n !== null && n !== undefined ? parseFloat(n).toFixed(1).replace('.0', '') : null);
 
-    // --- LOGIC KIỂM TRA HOÀN THÀNH ---
-    // Tìm xem ngày 10 đã được log chưa?
-    // (Giả định vòng đấu 10 ngày. Nếu dynamic thì dùng r.total_days)
-    const targetDay = r.total_days || 10; 
-    const finalDayLog = g.find(d => d.day === targetDay);
+    // --- LOGIC CHECK HOÀN THÀNH (STRICT) ---
+    // 1. Xác định ngày đích (Mặc định 10)
+    const targetDay = parseInt(r.total_days || 10);
     
-    // Điều kiện hiện kết quả: Ngày cuối cùng phải có status là 'logged'
-    const isFinished = (finalDayLog && finalDayLog.status === 'logged');
+    // 2. Tìm log của ngày đích (So sánh an toàn bằng string/int)
+    const finalDayLog = g.find(d => parseInt(d.day) === targetDay);
+    
+    // 3. Chỉ hiện kết quả nếu ngày đích có status là 'logged'
+    const isFinished = !!(finalDayLog && finalDayLog.status === 'logged');
 
-    // 1. MAP GRID
+    console.log(`[Logic Check] Player: ${p.name} | TargetDay: ${targetDay} | Status: ${finalDayLog?.status} => Finished: ${isFinished}`);
+
+    // --- MAPPING ---
     const daysMapped = g.map(d => {
         let valGram = 0;
         let statusClass = d.status; 
-
-        // Logic đổi màu Grid
         if (d.status === 'logged' && d.delta_from_start !== null) {
             valGram = Math.round(d.delta_from_start * 1000);
             if (valGram > 0) statusClass = 'gain';
-            if (valGram < 0) statusClass = 'loss';
-            if (valGram === 0) statusClass = 'logged';
+            else if (valGram < 0) statusClass = 'loss';
+            else statusClass = 'logged';
         }
-
         return {
             status: statusClass,
             value_g: valGram,
@@ -174,7 +149,6 @@ app.post("/render/personal", async (req, res) => {
         };
     });
 
-    // 2. MAP CONTEXT
     const context = {
         player: {
             name: p.name || "Chiến Binh",
@@ -183,39 +157,25 @@ app.post("/render/personal", async (req, res) => {
             round_name: r.name || "Vòng 1",
             info_line: `Ngày ${r.day_index || 1}, ${new Date().toLocaleDateString('vi-VN')}`
         },
-        
         stats: {
-            // Ô 1: BẮT ĐẦU (Luôn hiện)
             start: fmt(s.start_weight),
             
-            // Ô 2: VỀ ĐÍCH (Chỉ hiện khi đã xong vòng, ngược lại là null để hiện ?)
+            // Logic ẩn hiện tại đây:
             finish: isFinished ? fmt(s.current_weight) : null,
-            
-            // Ô 3: KẾT QUẢ (Chỉ hiện khi đã xong vòng)
             result: isFinished ? fmt(s.delta_weight) : null,
             
-            // Footer: Cân nặng thay đổi (Vẫn hiện tiến độ hiện tại để user biết mình đang đi đến đâu)
             current_change: fmt(s.delta_weight)
         },
-
         days: daysMapped
     };
 
-    // 3. RENDER
+    // Render & Upload
     let templateName = data.template_url || "personal_progress_v1.hbs";
-    const cleanName = String(context.player.name)
-        .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
-        .replace(/đ/g, "d").replace(/Đ/g, "D")
-        .replace(/[^a-zA-Z0-9\s]/g, "")
-        .trim().replace(/\s+/g, "_");
+    const cleanName = String(context.player.name).normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-zA-Z0-9\s]/g, "").trim().replace(/\s+/g, "_");
     const filename = `personal-${cleanName}-${timestamp}`;
 
-    console.log(`[Render] Generating for ${context.player.name} (Finished: ${isFinished})...`);
-
-    const width = data.width || 1080;
-    const height = data.height || 1444;
-
-    const base64 = await renderTemplate(templateName, context, { width, height });
+    console.log(`[Render] Generating...`);
+    const base64 = await renderTemplate(templateName, context, { width: 1080, height: 1444 });
     const imageUrl = await uploadToR2(base64, filename, "reports");
     
     console.log(`[Render] Success: ${imageUrl}`);
