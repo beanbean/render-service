@@ -121,55 +121,53 @@ app.post("/render/leaderboard", async (req, res) => {
 });
 
 // Route: Personal Card
-app.post('/render/personal', async (req, res) => {
-    try {
-        const data = req.body;
+app.post("/render/personal", async (req, res) => {
+  try {
+    const data = req.body;
+    const timestamp = Date.now();
 
-        // 1. Xử lý Template URL (Ưu tiên link từ n8n gửi sang)
-        const defaultUrl = "https://raw.githubusercontent.com/beanbean/nexme-render-templates/main/personal_progress_v1.hbs";
-        const templateUrl = data.template_url || defaultUrl;
+    // 1. DATA MAPPING
+    const context = {
+        ...data,
+        p_name: data.player?.name || data.p_name || "anon",
+        p_weight: data.player?.stats?.current_weight || data.p_weight,
+        p_change: data.player?.stats?.total_lost || data.p_change,
+        player: data.player || {},
+        stats: data.player?.stats || {},
+        round: data.round_config || {}
+    };
 
-        console.log(`[Render] Generating card using template: ${templateUrl}`);
+    // 2. CHỌN TEMPLATE
+    // Nếu n8n gửi "personal-progress/template.hbs" -> dùng luôn
+    let templateName = data.template_url || data.template || "personal_progress_v1.hbs";
 
-        // 2. Map dữ liệu (Để template cũ hay mới đều chạy được)
-        const context = {
-            ...data, // Data gốc
-            // Map cho template cũ (p_name, p_weight...)
-            p_name: data.player?.name || data.p_name,
-            p_weight: data.player?.stats?.current_weight || data.p_weight,
-            p_change: data.player?.stats?.total_lost || data.p_change,
-            // Map cho template mới
-            player: data.player,
-            stats: data.player?.stats,
-            round: data.round_config
-        };
-
-        // 3. Render Ảnh (Dùng hàm có sẵn của bạn)
-        const imageBuffer = await renderTemplate(templateUrl, context);
-
-        // 4. Upload & Trả về kết quả
-        // ⚠️ QUAN TRỌNG: Hãy kiểm tra code cũ của bạn dùng hàm upload nào (ví dụ: uploadToSupabase, uploadS3...)
-        // Dưới đây là logic giả định, bạn hãy giữ lại logic upload cũ của mình nhé:
+    // 3. TẠO TÊN FILE AN TOÀN (Slugify)
+    const cleanName = String(context.p_name)
+        .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+        .replace(/đ/g, "d").replace(/Đ/g, "D")
+        .replace(/[^a-zA-Z0-9\s]/g, "")
+        .trim().replace(/\s+/g, "_");
         
-        // --- BẮT ĐẦU VÙNG CẦN CHÚ Ý ---
-        // Ví dụ: const imageUrl = await uploadService.upload(imageBuffer);
-        // res.json({ status: 'success', image_url: imageUrl });
-        
-        // Nếu bạn chưa tìm lại được logic upload, tôi tạm trả về base64 để test (nhưng n8n cần URL)
-        // Hãy khôi phục dòng res.json(...) cũ của bạn ở đây!
-        // -----------------------------
+    const filename = `personal-${cleanName}-${timestamp}`;
 
-        // Tạm thời log ra để biết đã chạy xong
-        console.log('[Render] Done. Buffer size:', imageBuffer.length);
-        
-        // TODO: GG HÃY PASTE LẠI LOGIC UPLOAD/RESPONSE CŨ VÀO ĐÂY
-        res.json({ ok: true, image_url: imageUrl });
+    console.log(`[Render] Generating Personal Card via ${templateName} for ${context.p_name}...`);
 
-    } catch (error) {
-        console.error('[Render Error]', error);
-        res.status(500).json({ error: error.message });
-    }
-}); // <--- ĐỪNG QUÊN DẤU NÀY (Đóng hàm app.post)
+    const width = data.width || 1080;
+    const height = data.height || 1350;
+
+    // 4. RENDER & UPLOAD
+    const base64 = await renderTemplate(templateName, context, { width, height });
+    const imageUrl = await uploadToR2(base64, filename, "reports");
+    
+    console.log(`[Render] Success: ${imageUrl}`);
+    
+    res.json({ ok: true, image_url: imageUrl });
+
+  } catch (e) {
+    console.error("Error:", e);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
 
 // --- 7. START SERVER ---
 const PORT = process.env.PORT || 3000;
