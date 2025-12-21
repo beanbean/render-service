@@ -1,23 +1,49 @@
-# Dùng Image chuẩn của Puppeteer (Đã cài sẵn Chrome xịn)
-FROM ghcr.io/puppeteer/puppeteer:22.7.1
+# 1. Dùng Base Image từ Docker Hub (An toàn, không cần login)
+FROM node:20-slim
 
-# Chuyển quyền root để cài app
-USER root
+# 2. Cài đặt Chromium và các thư viện cần thiết để vẽ ảnh
+RUN apt-get update && apt-get install -y \
+    chromium \
+    fonts-liberation \
+    libasound2 \
+    libatk-bridge2.0-0 \
+    libatk1.0-0 \
+    libcups2 \
+    libdrm2 \
+    libxkbcommon0 \
+    libxcomposite1 \
+    libxdamage1 \
+    libxfixes3 \
+    libxrandr2 \
+    libnss3 \
+    libx11-6 \
+    libxss1 \
+    libgtk-3-0 \
+    fonts-freefont-ttf \
+    xdg-utils \
+    --no-install-recommends \
+    && rm -rf /var/lib/apt/lists/*
 
+# 3. Cấu hình biến môi trường để Puppeteer nhận diện Chrome
+ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
+ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
+ENV NODE_ENV=production
+ENV PORT=3000
+
+# 4. Thiết lập thư mục
 WORKDIR /app
 
-# Copy file cấu hình
+# 5. Copy file cấu hình
 COPY package*.json ./
 
-# Cài thư viện (Bỏ qua Chromium vì Image đã có sẵn)
-ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
-RUN npm ci --omit=dev
+# 6. Cài đặt thư viện (Dùng 'install' để tự tạo lockfile nếu thiếu)
+RUN npm install --omit=dev
 
-# Copy code
+# 7. Copy toàn bộ code nguồn (server.cjs, upload-r2.cjs)
 COPY . .
 
-# Chuyển lại quyền User Puppeteer (BẮT BUỘC để chạy Chrome an toàn)
-USER pptruser
-
+# 8. Mở cổng
 EXPOSE 3000
+
+# 9. Chạy server
 CMD ["node", "server.cjs"]
