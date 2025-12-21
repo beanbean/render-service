@@ -1,45 +1,33 @@
-# ---- Base image ----
-FROM node:20-slim
+# ✅ BƯỚC 1: Dùng Image chính chủ của Puppeteer (Đã có sẵn Chrome chuẩn)
+# Chọn version khớp với package.json (v22) để ổn định nhất
+FROM ghcr.io/puppeteer/puppeteer:22.7.1
 
-# ---- Cài đặt Chromium và các dependencies cần thiết cho Puppeteer ----
-RUN apt-get update && apt-get install -y \
-    chromium \
-    fonts-liberation \
-    libasound2 \
-    libatk-bridge2.0-0 \
-    libatk1.0-0 \
-    libcups2 \
-    libdrm2 \
-    libxkbcommon0 \
-    libxcomposite1 \
-    libxdamage1 \
-    libxfixes3 \
-    libxrandr2 \
-    libnss3 \
-    libx11-6 \
-    libxss1 \
-    libgtk-3-0 \
-    fonts-freefont-ttf \
-    xdg-utils \
-    && rm -rf /var/lib/apt/lists/*
+# ✅ BƯỚC 2: Chuyển quyền sang Root để cài đặt thư viện Node
+USER root
 
-# ---- Đặt thư mục làm việc ----
+# Thiết lập thư mục làm việc
 WORKDIR /app
 
-# ---- Copy và cài đặt dependencies ----
+# Copy file định nghĩa thư viện trước (Tối ưu cache)
 COPY package*.json ./
-RUN npm install --omit=dev
 
-# ---- Copy toàn bộ mã nguồn ----
+# Cài đặt thư viện (Bỏ qua devDependencies cho nhẹ)
+RUN npm ci --omit=dev
+
+# ✅ BƯỚC 3: Copy toàn bộ code nguồn vào
 COPY . .
 
-# ---- Biến môi trường ----
-ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
+# ✅ BƯỚC 4: Chuyển lại quyền cho user 'pptruser' (User bảo mật của Puppeteer)
+# Bắt buộc phải có dòng này, nếu chạy bằng root Chrome sẽ báo lỗi Sandbox
+USER pptruser
+
+# Thiết lập biến môi trường
 ENV NODE_ENV=production
 ENV PORT=3000
+# Lưu ý: Không cần set PUPPETEER_EXECUTABLE_PATH vì Image gốc đã tự set rồi
 
-# ---- Mở port cho Dokploy ----
+# Mở cổng
 EXPOSE 3000
 
-# ---- Lệnh khởi động trực tiếp ----
+# Chạy server
 CMD ["node", "server.cjs"]
