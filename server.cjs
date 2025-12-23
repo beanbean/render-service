@@ -11,6 +11,7 @@ app.use(bodyParser.json({ limit: "5mb" }));
 
 const API_KEY = process.env.API_KEY || "";
 
+// Auth Middleware
 app.use((req, res, next) => {
   if (!API_KEY) return next();
   const k = req.header("x-api-key") || req.query.api_key;
@@ -18,33 +19,21 @@ app.use((req, res, next) => {
   next();
 });
 
-app.get("/", (_, res) => res.json({ ok: true, mode: "universal-renderer" }));
+app.get("/", (_, res) => res.json({ ok: true, status: "alive", version: "v9-stable" }));
 
-// ============================================================
-// 🧠 BỘ NÃO CỦA TEMPLATE (HELPERS)
-// Giúp template tự xử lý logic mà không cần server can thiệp
-// ============================================================
-
-// 1. So sánh
+// --- HANDLEBARS HELPERS ---
 Handlebars.registerHelper("eq", (a, b) => a == b);
 Handlebars.registerHelper("neq", (a, b) => a != b);
 Handlebars.registerHelper("gt", (a, b) => Number(a) > Number(b));
 Handlebars.registerHelper("lt", (a, b) => Number(a) < Number(b));
 Handlebars.registerHelper("gte", (a, b) => Number(a) >= Number(b));
 Handlebars.registerHelper("lte", (a, b) => Number(a) <= Number(b));
-
-// 2. Logic (AND, OR, NOT)
 Handlebars.registerHelper("and", (a, b) => a && b);
 Handlebars.registerHelper("or", (a, b) => a || b);
 Handlebars.registerHelper("not", (a) => !a);
-
-// 3. Toán học
 Handlebars.registerHelper("add", (a, b) => Number(a) + Number(b));
 Handlebars.registerHelper("sub", (a, b) => Number(a) - Number(b));
-Handlebars.registerHelper("mul", (a, b) => Number(a) * Number(b));
 
-// 4. Format số liệu (Marathon Specific)
-// Sử dụng: {{formatDelta value}} -> Ra "+500" hoặc "-200" hoặc "0"
 Handlebars.registerHelper("formatDelta", (value) => {
     if (value === null || value === undefined) return "?";
     const num = parseFloat(value);
@@ -53,24 +42,19 @@ Handlebars.registerHelper("formatDelta", (value) => {
     return gram;
 });
 
-// Sử dụng: {{formatWeight value}} -> Ra "65.5" hoặc "--"
 Handlebars.registerHelper("formatWeight", (value) => {
     if (value === null || value === undefined) return "--";
     return parseFloat(value).toFixed(1).replace('.0', '');
 });
 
-// 5. Check Null/Undefined
-// Sử dụng: {{default value "Chưa có"}}
 Handlebars.registerHelper("default", (value, defaultValue) => {
     return (value !== null && value !== undefined) ? value : defaultValue;
 });
 
-// ============================================================
-
+// --- RENDER CORE FUNCTION ---
 async function renderTemplate(file, data) {
   try {
     const baseUrl = process.env.TEMPLATE_BASE_URL || "https://raw.githubusercontent.com/beanbean/nexme-render-templates/main";
-    // Tự động thêm đuôi .hbs nếu thiếu
     const fileName = file.endsWith('.hbs') ? file : file + '.hbs';
     const finalUrl = `${baseUrl}/${fileName}?t=${Date.now()}`;
     
@@ -84,17 +68,17 @@ async function renderTemplate(file, data) {
   } catch (err) { throw err; }
 }
 
-// 🔥 API DUY NHẤT CHO MỌI LOẠI ẢNH (GENERIC)
-app.post("/render", async (req, res) => {
+// --- SHARED LOGIC (HÀM XỬ LÝ CHUNG) ---
+const handleRenderRequest = async (req, res) => {
   try {
     const { template, data, width = 1080, height = 1444, filename_prefix = "image" } = req.body;
     
     if (!template) throw new Error("Missing 'template' field");
 
-    // 1. Render HTML từ Template + Data thô
+    // 1. Render HTML
     const html = await renderTemplate(template, data);
     
-    // 2. Chụp ảnh
+    // 2. Puppeteer Screenshot
     const browser = await puppeteer.launch({
       args: ["--no-sandbox", "--disable-setuid-sandbox"],
       headless: "new"
@@ -105,7 +89,7 @@ app.post("/render", async (req, res) => {
     const base64 = (await page.screenshot({ type: "png" })).toString("base64");
     await browser.close();
 
-    // 3. Upload
+    // 3. Upload R2
     const timestamp = Date.now();
     const finalName = `${filename_prefix}-${timestamp}`;
     const imageUrl = await uploadToR2(base64, finalName, "reports");
@@ -114,17 +98,26 @@ app.post("/render", async (req, res) => {
 
   } catch (e) {
     console.error("Error:", e);
-    res.status(500).json({ ok: false, error: e.message });
+    // Tránh crash server nếu res đã được gửi
+    if (!res.headersSent) {
+        res.status(500).json({ ok: false, error: e.message });
+    }
   }
-});
+};
 
-// Giữ lại route cũ để tương thích ngược (Optional - có thể xóa nếu sửa hết n8n)
-app.post("/render/personal", async (req, res) => {
-    // Forward sang logic generic
+// --- ROUTES ---
+
+// 1. Route Generic (Mới)
+app.post("/render", handleRenderRequest);
+
+// 2. Route Legacy (Tương thích ngược cho n8n cũ)
+app.post("/render/personal", (req, res) => {
+    // Sửa dữ liệu đầu vào cho khớp chuẩn mới
     req.body.template = req.body.template_url || "personal_progress.hbs";
     req.body.filename_prefix = "personal";
-    // Data giữ nguyên, vì template sẽ xử lý logic
-    return app._router.handle(req, res, () => {});
+    
+    // Gọi trực tiếp hàm xử lý (Không dùng router forward nữa -> Hết lỗi Loop)
+    return handleRenderRequest(req, res);
 });
 
 const PORT = process.env.PORT || 3000;
