@@ -14,24 +14,13 @@ const API_KEY = process.env.API_KEY || "";
 app.use((req, res, next) => {
   if (!API_KEY) return next();
   const k = req.header("x-api-key") || req.query.api_key;
-  if (k !== API_KEY) {
-    console.log(`[AUTH FAIL] Client sent: '${k}'`);
-    return res.status(401).json({ ok: false, error: "unauthorized" });
-  }
+  if (k !== API_KEY) return res.status(401).json({ ok: false, error: "unauthorized" });
   next();
 });
 
-app.get("/", (_, res) => res.json({ ok: true, status: "alive", version: "v9-full-helpers" }));
+app.get("/", (_, res) => res.json({ ok: true, status: "alive" }));
 
-// --- ĐĂNG KÝ FULL BỘ HELPER (FIX LỖI MISSING HELPER) ---
 Handlebars.registerHelper("eq", (a, b) => a === b);
-Handlebars.registerHelper("neq", (a, b) => a !== b);
-Handlebars.registerHelper("gt", (a, b) => a > b);
-Handlebars.registerHelper("gte", (a, b) => a >= b);
-Handlebars.registerHelper("lt", (a, b) => a < b);  // <-- Đây là cái đang thiếu
-Handlebars.registerHelper("lte", (a, b) => a <= b);
-Handlebars.registerHelper("add", (a, b) => a + b);
-Handlebars.registerHelper("sub", (a, b) => a - b);
 
 async function renderTemplate(file, data, opts = {}) {
   try {
@@ -39,12 +28,9 @@ async function renderTemplate(file, data, opts = {}) {
     const baseUrl = "https://raw.githubusercontent.com/beanbean/nexme-render-templates/main";
     const cleanFile = file.split('/').pop(); 
     const finalUrl = `${baseUrl}/${cleanFile}?t=${Date.now()}`;
-    
-    console.log(`[Template] Fetching: ${finalUrl}`);
     const response = await fetch(finalUrl);
     if (!response.ok) throw new Error(`Github 404: ${finalUrl}`);
     src = await response.text();
-    
     const tpl = Handlebars.compile(src);
     return tpl(data);
   } catch (err) { throw err; }
@@ -56,39 +42,42 @@ app.post("/render/personal", async (req, res) => {
     const timestamp = Date.now();
     
     const p = data.player || {};
-    const s = data.stats || {}; 
-    const g = p.grid || []; 
+    const s = data.stats || {};
+    const g = p.grid || [];
 
-    const fmt = (n) => (n !== null && n !== undefined ? parseFloat(n).toFixed(1).replace('.0', '') : "--");
+    // Helper format: Nếu null/undefined -> trả về null để logic dưới xử lý
+    const getVal = (n) => (n !== null && n !== undefined && n !== "") ? parseFloat(n) : null;
+    const fmt = (n) => (n !== null) ? n.toFixed(1).replace('.0', '') : "?";
 
+    // 1. Check Hoàn thành
     const day10 = g.find(d => d.day === 10);
-    const isFinished = day10 && (day10.status === 'logged' || (day10.delta_from_start !== null && day10.delta_from_start !== undefined));
+    // Coi là xong nếu ngày 10 đã có dữ liệu delta (đã nhập)
+    const isFinished = day10 && (day10.delta_from_start !== null && day10.delta_from_start !== undefined);
 
+    // 2. Map Grid
     const daysMapped = g.map(d => {
         let valDisplay = "?";
-        let statusClass = "future"; 
+        let statusClass = "future";
+        
+        let delta = getVal(d.delta_from_start);
 
-        if (d.delta_from_start !== null && d.delta_from_start !== undefined) {
-            let delta = parseFloat(d.delta_from_start); 
+        if (delta !== null) {
+            // Đổi ra Gram
             let deltaGram = Math.round(delta * 1000);
-
+            
             if (deltaGram === 0) {
-                statusClass = "logged"; 
+                statusClass = "logged"; // Màu xám đậm
                 valDisplay = "0";
             } else if (deltaGram < 0) {
-                statusClass = "loss";
-                valDisplay = deltaGram; 
+                statusClass = "loss";   // Màu xanh
+                valDisplay = deltaGram;
             } else {
-                statusClass = "gain";
-                valDisplay = "+" + deltaGram; 
+                statusClass = "gain";   // Màu cam
+                valDisplay = "+" + deltaGram;
             }
         } else {
-            statusClass = "future"; 
-            valDisplay = "?";
-        }
-        
-        if (d.day === 1 && d.status === 'logged') {
-             // Logic riêng cho ngày 1 nếu muốn
+            statusClass = "future";     // Màu xám nhạt
+            valDisplay = "?";           // Dấu hỏi
         }
 
         return {
@@ -99,6 +88,7 @@ app.post("/render/personal", async (req, res) => {
         };
     });
 
+    // 3. Chuẩn bị Context
     const context = {
         player: {
             name: p.name,
@@ -108,15 +98,23 @@ app.post("/render/personal", async (req, res) => {
             info_line: p.info_line || `Ngày ${new Date().getDate()}`
         },
         stats: {
-            start: fmt(s.start_weight),
-            finish: isFinished ? fmt(s.current_weight) : "--", 
-            result: isFinished ? fmt(s.delta_weight) : "--",
-            current_change: fmt(s.delta_weight)
+            // Bắt đầu: Luôn hiện
+            start: fmt(getVal(s.start_weight)),
+            
+            // Về đích & Kết quả: Chỉ hiện nếu xong, còn lại hiện ?
+            finish: isFinished ? fmt(getVal(s.current_weight)) : "?",
+            result: isFinished ? fmt(getVal(s.delta_weight)) : "?",
+            
+            // Dòng tổng kết dưới cùng: Luôn hiện delta tổng
+            // Lưu ý: Biến s.delta_weight được n8n gửi sang (chứa current_change)
+            current_change: fmt(getVal(s.delta_weight))
         },
         days: daysMapped
     };
 
     const filename = `personal-${timestamp}`;
+    
+    // Render
     const html = await renderTemplate("personal_progress.hbs", context);
     
     const browser = await puppeteer.launch({
