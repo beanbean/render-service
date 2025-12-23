@@ -1,4 +1,3 @@
-cat > /app/server.cjs <<'EOF'
 const path = require("path");
 const fs = require("fs/promises");
 const express = require("express");
@@ -129,4 +128,3 @@ app.post("/render/personal", async (req, res) => {
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`✅ Server running on port ${PORT}`));
-EOF
