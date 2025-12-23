@@ -18,17 +18,9 @@ app.use((req, res, next) => {
   next();
 });
 
-app.get("/", (_, res) => res.json({ ok: true, status: "alive", version: "v9-full-helpers" }));
+app.get("/", (_, res) => res.json({ ok: true, status: "alive" }));
 
-// --- ĐĂNG KÝ FULL BỘ HELPER (FIX LỖI MISSING HELPER) ---
 Handlebars.registerHelper("eq", (a, b) => a === b);
-Handlebars.registerHelper("neq", (a, b) => a !== b);
-Handlebars.registerHelper("gt", (a, b) => a > b);
-Handlebars.registerHelper("gte", (a, b) => a >= b);
-Handlebars.registerHelper("lt", (a, b) => a < b);  // <-- Đây là cái đang thiếu
-Handlebars.registerHelper("lte", (a, b) => a <= b);
-Handlebars.registerHelper("add", (a, b) => a + b);
-Handlebars.registerHelper("sub", (a, b) => a - b);
 
 async function renderTemplate(file, data, opts = {}) {
   try {
@@ -36,12 +28,9 @@ async function renderTemplate(file, data, opts = {}) {
     const baseUrl = "https://raw.githubusercontent.com/beanbean/nexme-render-templates/main";
     const cleanFile = file.split('/').pop(); 
     const finalUrl = `${baseUrl}/${cleanFile}?t=${Date.now()}`;
-    
-    console.log(`[Template] Fetching: ${finalUrl}`);
     const response = await fetch(finalUrl);
     if (!response.ok) throw new Error(`Github 404: ${finalUrl}`);
     src = await response.text();
-    
     const tpl = Handlebars.compile(src);
     return tpl(data);
   } catch (err) { throw err; }
@@ -53,40 +42,40 @@ app.post("/render/personal", async (req, res) => {
     const timestamp = Date.now();
     
     const p = data.player || {};
-    const s = data.stats || {}; 
-    const g = p.grid || []; 
+    const s = data.stats || {};
+    const g = p.grid || [];
 
-    const fmt = (n) => (n !== null && n !== undefined ? parseFloat(n).toFixed(1).replace('.0', '') : "--");
+    // Format: Nếu null thì trả về "?"
+    const fmt = (n) => (n !== null && n !== undefined) ? parseFloat(n).toFixed(1).replace('.0', '') : "?";
 
+    // 1. Check Hoàn thành (Chỉ hiện kết quả khi xong Ngày 10)
     const day10 = g.find(d => d.day === 10);
-    const isFinished = day10 && (day10.status === 'logged' || (day10.delta_from_start !== null && day10.delta_from_start !== undefined));
+    const isFinished = day10 && day10.status === 'logged'; // Node n8n trả status 'logged' nếu có dữ liệu
 
+    // 2. Map Grid
     const daysMapped = g.map(d => {
         let valDisplay = "?";
-        let statusClass = "future"; 
+        let statusClass = "future";
+        
+        let delta = d.delta_from_start; // Nhận từ n8n
 
-        if (d.delta_from_start !== null && d.delta_from_start !== undefined) {
-            let delta = parseFloat(d.delta_from_start); 
-            let deltaGram = Math.round(delta * 1000);
-
+        if (delta !== null && delta !== undefined) {
+            let deltaGram = Math.round(parseFloat(delta) * 1000);
+            
             if (deltaGram === 0) {
-                statusClass = "logged"; 
+                statusClass = "logged"; // Màu xám đậm
                 valDisplay = "0";
             } else if (deltaGram < 0) {
-                statusClass = "loss";
-                valDisplay = deltaGram; 
+                statusClass = "loss";   // Màu xanh
+                valDisplay = deltaGram; // Hiện số âm (-500)
             } else {
-                statusClass = "gain";
-                valDisplay = "+" + deltaGram; 
+                statusClass = "gain";   // Màu cam
+                valDisplay = "+" + deltaGram; // Thêm dấu + (+500)
             }
         } else {
-            statusClass = "future"; 
-            valDisplay = "?";
-        }
-        
-        // Fix hiển thị Ngày 1 nếu đã có log
-        if (d.day === 1 && d.status === 'logged') {
-             // Logic riêng cho ngày 1 nếu muốn
+            // Trường hợp chưa báo cáo
+            statusClass = "future"; // Template style cho màu xám nhạt
+            valDisplay = "?";       // Hiện dấu hỏi
         }
 
         return {
@@ -97,18 +86,21 @@ app.post("/render/personal", async (req, res) => {
         };
     });
 
+    // 3. Chuẩn bị Context
     const context = {
         player: {
             name: p.name,
             team: p.team,
             avatar: p.avatar,
             round_name: p.round_name,
-            info_line: p.info_line || `Ngày ${new Date().getDate()}`
+            info_line: p.info_line
         },
         stats: {
             start: fmt(s.start_weight),
-            finish: isFinished ? fmt(s.current_weight) : "--", 
-            result: isFinished ? fmt(s.delta_weight) : "--",
+            // Logic: Chưa xong giải -> Hiện ?
+            finish: isFinished ? fmt(s.current_weight) : "?",
+            result: isFinished ? fmt(s.delta_weight) : "?",
+            // Tổng kết dưới cùng: Luôn hiện số thực
             current_change: fmt(s.delta_weight)
         },
         days: daysMapped
