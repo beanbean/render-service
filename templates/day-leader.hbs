@@ -1,0 +1,298 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Day Leader</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@600;700;800;900&family=Nunito:wght@400;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --primary: #004E4E;
+      --primary-light: #047857;
+      --accent: #9FD356;
+      --accent-dark: #7CB342;
+      --bg1: #10B981;
+      --bg2: #047857;
+      --card: #ffffff;
+      --text-dark: #064E3B;
+      --text-muted: #6B7280;
+      --gold: #F59E0B;
+      --shadow: 0 24px 60px rgba(0, 78, 78, 0.3);
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body {
+      width: 1080px;
+      height: 1600px;
+      font-family: 'Nunito', system-ui, -apple-system, sans-serif;
+    }
+    body {
+      background: radial-gradient(ellipse 1400px 1200px at 50% 0%, var(--bg1), var(--bg2) 60%, var(--primary) 100%);
+      color: var(--text-dark);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 60px 48px;
+    }
+
+    /* Header */
+    .header {
+      text-align: center;
+      margin-bottom: 40px;
+    }
+    .header-label {
+      font-family: 'Outfit', sans-serif;
+      font-size: 28px;
+      font-weight: 600;
+      color: rgba(255,255,255,0.7);
+      text-transform: uppercase;
+      letter-spacing: 6px;
+      margin-bottom: 12px;
+    }
+    .header-title {
+      font-family: 'Outfit', sans-serif;
+      font-size: 72px;
+      font-weight: 900;
+      color: #fff;
+      text-shadow: 0 6px 24px rgba(0,0,0,0.25);
+      text-transform: uppercase;
+      letter-spacing: 2px;
+    }
+
+    /* Achievement Badge */
+    .badge-wrapper {
+      position: relative;
+      margin-bottom: 32px;
+    }
+    .badge-glow {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: 450px;
+      height: 450px;
+      background: radial-gradient(circle, rgba(159,211,86,0.4) 0%, transparent 70%);
+      border-radius: 50%;
+    }
+    .achievement-badge {
+      position: relative;
+      width: 160px;
+      height: 160px;
+      background: linear-gradient(145deg, var(--gold), #D97706);
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin: 0 auto;
+      box-shadow: 0 12px 40px rgba(245, 158, 11, 0.5);
+    }
+    .badge-icon {
+      font-size: 80px;
+    }
+
+    /* Main Card */
+    .leader-card {
+      background: var(--card);
+      border-radius: 36px;
+      padding: 48px;
+      width: 920px;
+      box-shadow: var(--shadow);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    .avatar-container {
+      position: relative;
+      margin-bottom: 28px;
+    }
+    .avatar-ring {
+      width: 320px;
+      height: 320px;
+      border-radius: 50%;
+      padding: 8px;
+      background: linear-gradient(145deg, var(--accent), var(--primary));
+    }
+    .avatar {
+      width: 100%;
+      height: 100%;
+      border-radius: 50%;
+      overflow: hidden;
+      border: 8px solid #fff;
+      box-shadow: 0 16px 48px rgba(0,0,0,0.2);
+    }
+    .avatar img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+    .crown {
+      position: absolute;
+      top: -40px;
+      left: 50%;
+      transform: translateX(-50%);
+      font-size: 72px;
+    }
+
+    .leader-name {
+      font-family: 'Outfit', sans-serif;
+      font-size: 56px;
+      font-weight: 800;
+      color: var(--text-dark);
+      margin-bottom: 8px;
+      text-align: center;
+    }
+    .leader-role {
+      font-size: 28px;
+      color: var(--primary);
+      font-weight: 600;
+      margin-bottom: 28px;
+    }
+
+    /* Stats Grid */
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 20px;
+      width: 100%;
+      margin-bottom: 32px;
+    }
+    .stat-box {
+      background: linear-gradient(145deg, #F9FAFB, #F3F4F6);
+      border-radius: 20px;
+      padding: 24px;
+      text-align: center;
+    }
+    .stat-value {
+      font-family: 'Outfit', sans-serif;
+      font-size: 44px;
+      font-weight: 800;
+      color: var(--primary);
+      margin-bottom: 4px;
+    }
+    .stat-label {
+      font-size: 22px;
+      color: var(--text-muted);
+      font-weight: 600;
+    }
+    .stat-box.highlight {
+      background: linear-gradient(145deg, var(--accent), #7CB342);
+    }
+    .stat-box.highlight .stat-value {
+      color: #fff;
+    }
+    .stat-box.highlight .stat-label {
+      color: rgba(255,255,255,0.9);
+    }
+
+    /* Team Context */
+    .team-context {
+      background: linear-gradient(135deg, var(--primary), var(--primary-light));
+      border-radius: 20px;
+      padding: 24px 40px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 32px;
+      width: 100%;
+    }
+    .context-item {
+      text-align: center;
+      color: #fff;
+    }
+    .context-value {
+      font-family: 'Outfit', sans-serif;
+      font-size: 32px;
+      font-weight: 700;
+    }
+    .context-label {
+      font-size: 20px;
+      opacity: 0.8;
+    }
+    .context-divider {
+      width: 2px;
+      height: 48px;
+      background: rgba(255,255,255,0.3);
+    }
+
+    /* Footer */
+    .footer {
+      text-align: center;
+      margin-top: 40px;
+      color: rgba(255,255,255,0.7);
+      font-size: 24px;
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div class="header-label">Marathon Wellness</div>
+    <div class="header-title">Day Leader</div>
+  </div>
+
+  <!-- Achievement Badge -->
+  <div class="badge-wrapper">
+    <div class="badge-glow"></div>
+    <div class="achievement-badge">
+      <span class="badge-icon">⭐</span>
+    </div>
+  </div>
+
+  <!-- Main Card -->
+  <div class="leader-card">
+    <div class="avatar-container">
+      <span class="crown">👑</span>
+      <div class="avatar-ring">
+        <div class="avatar">
+          <img src="{{avatar}}" alt="{{name}}" />
+        </div>
+      </div>
+    </div>
+
+    <div class="leader-name">{{name}}</div>
+    <div class="leader-role">{{default role "Day Leader"}}</div>
+
+    <!-- Stats -->
+    <div class="stats-grid">
+      <div class="stat-box">
+        <div class="stat-value">{{formatWeight weight}}kg</div>
+        <div class="stat-label">Current Weight</div>
+      </div>
+      <div class="stat-box highlight">
+        <div class="stat-value">{{formatDelta delta}}</div>
+        <div class="stat-label">Today's Change</div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-value">{{streak}}</div>
+        <div class="stat-label">Day Streak</div>
+      </div>
+    </div>
+
+    <!-- Team Context -->
+    <div class="team-context">
+      <div class="context-item">
+        <div class="context-value">{{team}}</div>
+        <div class="context-label">Team</div>
+      </div>
+      <div class="context-divider"></div>
+      <div class="context-item">
+        <div class="context-value">Lap {{lap}}</div>
+        <div class="context-label">Current Lap</div>
+      </div>
+      <div class="context-divider"></div>
+      <div class="context-item">
+        <div class="context-value">Day {{day}}</div>
+        <div class="context-label">of 10</div>
+      </div>
+      <div class="context-divider"></div>
+      <div class="context-item">
+        <div class="context-value">{{vp}} VP</div>
+        <div class="context-label">Points</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="footer">
+    {{default achievement_text "Congratulations on leading today!"}}
+  </div>
+</body>
+</html>
