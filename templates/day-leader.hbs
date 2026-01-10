@@ -127,10 +127,16 @@
     }
     .crown {
       position: absolute;
-      top: -40px;
+      top: -50px;
       left: 50%;
       transform: translateX(-50%);
-      font-size: 72px;
+      width: 80px;
+      height: 60px;
+      z-index: 10;
+    }
+    .crown svg {
+      width: 100%;
+      height: 100%;
     }
 
     .leader-name {
@@ -225,8 +231,8 @@
 </head>
 <body>
   <div class="header">
-    <div class="header-label">Marathon Wellness</div>
-    <div class="header-title">Day Leader</div>
+    <div class="header-label">Marathon Sức Khỏe</div>
+    <div class="header-title">Thủ Lĩnh Ngày</div>
   </div>
 
   <!-- Achievement Badge -->
@@ -240,7 +246,15 @@
   <!-- Main Card -->
   <div class="leader-card">
     <div class="avatar-container">
-      <span class="crown">👑</span>
+      <div class="crown">
+        <svg viewBox="0 0 100 80" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M50 0L65 30L100 20L85 55L15 55L0 20L35 30L50 0Z" fill="#F59E0B"/>
+          <path d="M15 55L85 55L85 70C85 75 80 80 75 80L25 80C20 80 15 75 15 70L15 55Z" fill="#D97706"/>
+          <circle cx="25" cy="65" r="5" fill="#FBBF24"/>
+          <circle cx="50" cy="65" r="5" fill="#FBBF24"/>
+          <circle cx="75" cy="65" r="5" fill="#FBBF24"/>
+        </svg>
+      </div>
       <div class="avatar-ring">
         <div class="avatar">
           <img src="{{avatar}}" alt="{{name}}" />
@@ -255,15 +269,15 @@
     <div class="stats-grid">
       <div class="stat-box">
         <div class="stat-value">{{formatWeight weight}}kg</div>
-        <div class="stat-label">Current Weight</div>
+        <div class="stat-label">Cân nặng</div>
       </div>
       <div class="stat-box highlight">
         <div class="stat-value">{{formatDelta delta}}</div>
-        <div class="stat-label">Today's Change</div>
+        <div class="stat-label">Thay đổi hôm nay</div>
       </div>
       <div class="stat-box">
         <div class="stat-value">{{streak}}</div>
-        <div class="stat-label">Day Streak</div>
+        <div class="stat-label">Chuỗi ngày</div>
       </div>
     </div>
 
@@ -271,28 +285,28 @@
     <div class="team-context">
       <div class="context-item">
         <div class="context-value">{{team}}</div>
-        <div class="context-label">Team</div>
+        <div class="context-label">Đội</div>
       </div>
       <div class="context-divider"></div>
       <div class="context-item">
-        <div class="context-value">Lap {{lap}}</div>
-        <div class="context-label">Current Lap</div>
+        <div class="context-value">Vòng {{lap}}</div>
+        <div class="context-label">Hiện tại</div>
       </div>
       <div class="context-divider"></div>
       <div class="context-item">
-        <div class="context-value">Day {{day}}</div>
-        <div class="context-label">of 10</div>
+        <div class="context-value">Ngày {{day}}</div>
+        <div class="context-label">trên 10</div>
       </div>
       <div class="context-divider"></div>
       <div class="context-item">
         <div class="context-value">{{vp}} VP</div>
-        <div class="context-label">Points</div>
+        <div class="context-label">Điểm</div>
       </div>
     </div>
   </div>
 
   <div class="footer">
-    {{default achievement_text "Congratulations on leading today!"}}
+    {{default achievement_text "Chúc mừng bạn đã dẫn đầu ngày hôm nay!"}}
   </div>
 </body>
 </html>
